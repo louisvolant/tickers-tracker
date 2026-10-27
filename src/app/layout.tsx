@@ -24,6 +24,9 @@ export const metadata: Metadata = {
   ],
   authors: [{ name: 'Ticker-Tracker Team' }],
   creator: 'Ticker-Tracker',
+  alternates: {
+    canonical: '/',
+  },
   manifest: '/manifest.json',
   icons: {
     icon: [

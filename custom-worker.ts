@@ -19,13 +19,21 @@ import { default as handler } from './.open-next/worker.js';
 import { setRuntimeEnv } from './src/lib/env';
 import { runAlertScan } from './src/lib/alertScan';
 import { dispatchAlertNotifications } from './src/lib/alertDispatch';
+import { getCanonicalRedirectUrl } from './src/lib/canonicalRequest';
 
 interface CronContext {
   waitUntil(promise: Promise<unknown>): void;
 }
 
 export default {
-  fetch: handler.fetch,
+  async fetch(request: Request, env: Record<string, any>, ctx: unknown) {
+    // Collapse http://, the apex host and any other production alias onto the
+    // single canonical https://www origin before rendering or caching a page.
+    const redirect = getCanonicalRedirectUrl(request.url);
+    if (redirect) return Response.redirect(redirect, 301);
+
+    return handler.fetch(request, env, ctx);
+  },
 
   async scheduled(_event: unknown, env: Record<string, any>, ctx: CronContext) {
     // Make the Worker bindings visible to getEnvVar() and kvGet().

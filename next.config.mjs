@@ -33,6 +33,13 @@ const nextConfig = {
         ],
       },
       {
+        // robots.txt already disallows /api/, but crawlers that ignore it (or
+        // reach an endpoint directly) must not index OAuth redirects or
+        // per-user JSON either.
+        source: '/api/:path*',
+        headers: [{ key: 'X-Robots-Tag', value: 'noindex, nofollow' }],
+      },
+      {
         source: '/sw.js',
         headers: [
           { key: 'Content-Type', value: 'application/javascript' },

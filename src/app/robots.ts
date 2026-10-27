@@ -6,7 +6,10 @@ export default function robots(): MetadataRoute.Robots {
   return {
     rules: {
       userAgent: '*',
-      allow: ['/', '/privacy', '/terms'],
+      allow: ['/', '/ticker/', '/privacy', '/terms'],
+      // API routes are machine-only. Blocking them keeps OAuth redirects and
+      // personalized JSON out of the crawl: "Blocked by robots.txt" entries in
+      // Search Console are the expected outcome for these URLs.
       disallow: ['/api/'],
     },
     sitemap: `${baseUrl}/sitemap.xml`,

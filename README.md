@@ -56,7 +56,7 @@ A modern, lightning-fast stock and valuation multiples tracker built with Next.j
   - **Zero-Friction CTAs & Replay**: One-click replay (`↺`) plus direct access to the live batch-add importer.
 - **Account Lifecycle & Security**: Registration, login, Google OAuth 2.0 integration, password updates (`/api/auth/changepassword`), and complete account deletion (`/api/auth/delete_my_account`).
 - **Multilingual Support (i18n)**: Full localization across 6 languages: English (`en`), French (`fr`), German (`de`), Spanish (`es`), Italian (`it`), and Portuguese (`pt`), with an active language selector.
-- **SEO & Legal**: Comprehensive metadata, dynamic `sitemap.xml`, `robots.txt`, Privacy Policy (`/privacy`), Terms of Service (`/terms`), and footer links to [Personal Page](https://www.louisvolant.com) and [Portfolio](https://www.louisvolant.com/portfolio).
+- **SEO & Legal**: Canonical URLs on the homepage, ticker pages and legal pages, a 301 redirect from `http://` and the apex host to `https://www.tickertracker.net`, dynamic `sitemap.xml`, `robots.txt` (public pages allowed, `/api/` blocked and marked `noindex`), Privacy Policy (`/privacy`), Terms of Service (`/terms`), and footer links to [Personal Page](https://www.louisvolant.com) and [Portfolio](https://www.louisvolant.com/portfolio).
 - **Privacy-Safe Caching**: Personalized routes (`/ticker/`, `/api/`) are forced dynamic, sent with `Cache-Control: private, no-store`, and excluded from Service Worker Cache Storage — your reference target and personal notes are never retained by a CDN, proxy or offline cache.
 - **Cloudflare Workers Ready**: Compatible with Cloudflare Workers / OpenNext with KV storage bindings (`KV`, `ticker_tracker_kv`), `keep_vars = true` preservation, and local development fallback.
 
@@ -227,6 +227,7 @@ Covers:
 - Cache policy for personalized routes: `next.config.mjs` header rules for `/ticker/:path*` (`private` + `no-store`, no `s-maxage`) and that static PWA assets stay cacheable
 - Yahoo Finance client lifecycle: no module-scope instantiation, a single factory, exactly one client per batch, and a fresh client per single-quote call (guards the Workers cross-request promise race)
 - Market status: session-derived open / just-closed / opens-soon / closed states, viewer-timezone clock formatting, and opening-day labels that follow the rendered timezone
+- SEO crawl hygiene: canonical redirects for `http://` and the apex host, `robots.txt` rules, and the `noindex` header on `/api/` responses
 
 ### Run End-to-End Tests (Playwright)
 ```bash
@@ -242,6 +243,7 @@ Covers:
 - Cache privacy for the ticker page: `no-store` response headers, no personalized markers in the server-rendered HTML, a dynamic (never pre-rendered) route, and a Cache Storage inspection proving the Service Worker persists nothing under `/ticker/` or `/api/tickers`.
 - Quote API concurrency: parallel batch requests, mixed parallel calls across every Yahoo-backed endpoint, and full symbol fan-out. Note this runs under Node and therefore cannot reproduce the Workers-only crumb race - see the request-scoped client note above.
 - Quotes, sessions and market status: venue open / just closed / opens soon / closed badges, and a US opening displayed on a Paris viewer's clock with the exchange timezone in the tooltip.
+- Search engine signals: `robots.txt` allow/disallow rules and sitemap reference, canonical URLs on the homepage and ticker pages, and the `noindex` header on API responses.
 
 ---
 

@@ -89,6 +89,7 @@ export function AuthModal() {
         {/* Google OAuth Button */}
         <a
           href="/api/auth/google"
+          rel="nofollow"
           className="w-full flex items-center justify-center gap-3 py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-750 text-white font-medium text-sm border border-slate-700 hover:border-slate-600 transition shadow-sm mb-5"
         >
           <svg className="w-4 h-4" viewBox="0 0 24 24">

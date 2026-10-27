@@ -579,6 +579,7 @@ function Dashboard() {
                 </button>
                 <a
                   href="/api/auth/google"
+                  rel="nofollow"
                   className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-750 text-white font-medium text-xs sm:text-sm border border-slate-700 transition flex items-center gap-2 cursor-pointer"
                 >
                   <svg className="w-3.5 h-3.5" viewBox="0 0 24 24">

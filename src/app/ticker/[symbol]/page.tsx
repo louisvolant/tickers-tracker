@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { TickerDetailsPage } from '@/app/components/TickerDetailsPage';
 import { AuthProvider } from '@/context/AuthContext';
 import { CurrencyProvider } from '@/context/CurrencyContext';
+import { getSiteUrl } from '@/lib/site';
 
 interface PageProps {
   params: Promise<{ symbol: string }>;
@@ -17,6 +18,9 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   return {
     title: `${clean} — Price History, P/E & Analyst Forecasts`,
     description: `Detailed view for ${clean}: live price, trailing and forward P/E multiples, 52-week range, price history chart and sell-side earnings consensus.`,
+    alternates: {
+      canonical: `${getSiteUrl()}/ticker/${encodeURIComponent(clean)}`,
+    },
   };
 }
 
