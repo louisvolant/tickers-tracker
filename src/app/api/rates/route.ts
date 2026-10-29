@@ -1,12 +1,16 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getExchangeRates } from '@/lib/exchangeRates';
+import { assertSameOrigin } from '@/lib/sameOrigin';
 
 export const runtime = 'nodejs';
 
 /**
  * GET /api/rates - EUR-based exchange rates, cached server-side (KV).
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
   try {
     const data = await getExchangeRates();
     return NextResponse.json(data, {

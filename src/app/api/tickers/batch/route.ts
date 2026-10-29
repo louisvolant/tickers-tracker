@@ -4,6 +4,7 @@ import { kvGet, kvPut } from '@/lib/kv';
 import { getQuotesBatched } from '@/lib/yahooFinance';
 import { UserTicker } from '@/lib/types';
 import { MAX_BATCH_TICKERS, parseTickerSymbols } from '@/lib/batchTickers';
+import { assertSameOrigin } from '@/lib/sameOrigin';
 
 export const runtime = 'nodejs';
 
@@ -17,6 +18,9 @@ export const runtime = 'nodejs';
  * than one getQuote() per symbol, so a 25-symbol paste stays cheap.
  */
 export async function POST(request: NextRequest) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
   const user = await getSessionUser();
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

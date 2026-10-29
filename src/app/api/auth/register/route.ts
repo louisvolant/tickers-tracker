@@ -5,10 +5,14 @@ import { ISO_FIAT_CURRENCIES } from '@/lib/currencies';
 import { getRequestOrigin } from '@/lib/env';
 import { EmailAlreadyExistsError } from '@/lib/users.types';
 import { getUserRepository } from '@/lib/users';
+import { assertSameOrigin } from '@/lib/sameOrigin';
 
 export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
   try {
     const { email, password, username, preferredCurrency } = await request.json();
 

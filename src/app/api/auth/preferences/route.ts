@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser, setSessionUser } from '@/lib/session';
 import { ISO_FIAT_CURRENCIES } from '@/lib/currencies';
 import { getUserRepository } from '@/lib/users';
+import { assertSameOrigin } from '@/lib/sameOrigin';
 
 export const runtime = 'nodejs';
 
@@ -9,6 +10,9 @@ export const runtime = 'nodejs';
  * PATCH /api/auth/preferences - Update the user's preferred reference currency.
  */
 export async function PATCH(request: NextRequest) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
   const sessionUser = await getSessionUser();
   if (!sessionUser) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

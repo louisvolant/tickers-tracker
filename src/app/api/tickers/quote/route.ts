@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getBatchQuotes, getQuote } from '@/lib/yahooFinance';
+import { assertSameOrigin } from '@/lib/sameOrigin';
 
 export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
   const { searchParams } = new URL(request.url);
   const symbolsParam = searchParams.get('symbols') || searchParams.get('symbol');
 

@@ -3,10 +3,14 @@ import { verifyPassword } from '@/lib/authCrypto';
 import { createSessionCookie } from '@/lib/session';
 import { getRequestOrigin } from '@/lib/env';
 import { getUserRepository } from '@/lib/users';
+import { assertSameOrigin } from '@/lib/sameOrigin';
 
 export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
   try {
     const { email, password } = await request.json();
 

@@ -8,6 +8,7 @@ import {
   parsePushSubscription,
   removePushSubscription,
 } from '@/lib/push';
+import { assertSameOrigin } from '@/lib/sameOrigin';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -46,6 +47,9 @@ export async function GET() {
  * Idempotent: subscribing the same endpoint again refreshes it in place.
  */
 export async function POST(request: NextRequest) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
   const user = await getSessionUser();
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -83,6 +87,9 @@ export async function POST(request: NextRequest) {
  * account deletion flow (which drops the whole key).
  */
 export async function DELETE(request: NextRequest) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
   const user = await getSessionUser();
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/session';
 import { kvGet, kvPut } from '@/lib/kv';
 import { UserTicker } from '@/lib/types';
+import { assertSameOrigin } from '@/lib/sameOrigin';
 
 export const runtime = 'nodejs';
 
@@ -9,6 +10,9 @@ export const runtime = 'nodejs';
  * POST /api/tickers/reorder - Update order of tickers in user's watchlist
  */
 export async function POST(request: NextRequest) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
   const user = await getSessionUser();
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

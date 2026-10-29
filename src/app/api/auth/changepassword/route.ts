@@ -2,10 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/session';
 import { verifyPassword, hashPassword } from '@/lib/authCrypto';
 import { getUserRepository } from '@/lib/users';
+import { assertSameOrigin } from '@/lib/sameOrigin';
 
 export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
   const sessionUser = await getSessionUser();
   if (!sessionUser) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

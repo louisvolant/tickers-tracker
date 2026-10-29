@@ -2,10 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser, clearSession } from '@/lib/session';
 import { kvDelete } from '@/lib/kv';
 import { getUserRepository } from '@/lib/users';
+import { assertSameOrigin } from '@/lib/sameOrigin';
 
 export const runtime = 'nodejs';
 
-async function handleDeleteAccount() {
+async function handleDeleteAccount(request: NextRequest) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
   const sessionUser = await getSessionUser();
   if (!sessionUser) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -43,9 +47,9 @@ async function handleDeleteAccount() {
 }
 
 export async function DELETE(request: NextRequest) {
-  return handleDeleteAccount();
+  return handleDeleteAccount(request);
 }
 
 export async function POST(request: NextRequest) {
-  return handleDeleteAccount();
+  return handleDeleteAccount(request);
 }

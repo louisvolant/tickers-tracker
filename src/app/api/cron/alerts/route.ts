@@ -8,6 +8,9 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 async function handle(request: NextRequest) {
+  // Deliberately no assertSameOrigin(): this is a signed machine-to-machine
+  // webhook. verifyCronRequest() below authenticates the timestamped HMAC, which
+  // is the correct control for a caller that has no browser origin.
   const secret = getEnvVar('CRON_SECRET');
   if (!secret) {
     // Fail closed: an unauthenticated scan endpoint would let anyone burn the

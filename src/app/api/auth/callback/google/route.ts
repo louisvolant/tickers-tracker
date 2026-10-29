@@ -19,6 +19,9 @@ function redirectTo(url: string): NextResponse {
 }
 
 export async function GET(request: NextRequest) {
+  // Deliberately no assertSameOrigin(): this is the provider's cross-site
+  // redirect back from Google, not a browser-initiated mutation. The one-time
+  // OAuth code exchanged below is the credential that authorizes the callback.
   const { searchParams } = new URL(request.url);
   const code = searchParams.get('code');
   const origin = getRequestOrigin(request);

@@ -6,6 +6,7 @@ import { UserTicker } from '@/lib/types';
 import { ISO_FIAT_CURRENCIES } from '@/lib/currencies';
 import { parseAlertThreshold, validateAlertPair } from '@/lib/alerts';
 import { clearTickerAlertState } from '@/lib/alertStore';
+import { assertSameOrigin } from '@/lib/sameOrigin';
 
 export const runtime = 'nodejs';
 
@@ -35,7 +36,10 @@ function parseAlertCurrency(value: unknown): { valid: boolean; code: string | nu
 /**
  * GET /api/tickers - Retrieve authenticated user's tickers with live quotes
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
   const user = await getSessionUser();
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -72,6 +76,9 @@ export async function GET() {
  * POST /api/tickers - Add a new ticker to user's watchlist
  */
 export async function POST(request: NextRequest) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
   const user = await getSessionUser();
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -137,6 +144,9 @@ export async function POST(request: NextRequest) {
  * PATCH /api/tickers - Update tracking value or notes for a ticker
  */
 export async function PATCH(request: NextRequest) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
   const user = await getSessionUser();
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -271,6 +281,9 @@ export async function PATCH(request: NextRequest) {
  * DELETE /api/tickers - Remove a ticker from watchlist
  */
 export async function DELETE(request: NextRequest) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
   const user = await getSessionUser();
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
