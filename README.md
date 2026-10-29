@@ -54,7 +54,7 @@ A modern, lightning-fast stock and valuation multiples tracker built with Next.j
   - **Dual Responsive Architecture**: Split-screen side-by-side mode on desktop (`md:`), and an automatic morphing view with tactile comparison tabs (`Raw input` ⇄ `Enriched cards`) on mobile.
   - **3 Realistic 1-Click Presets**: Preloaded with Broker notes (`AAPL, MSFT...`), PEA & US mix (`MC.PA, AIR.PA, TSLA...`), and unstructured forum discussions.
   - **Zero-Friction CTAs & Replay**: One-click replay (`↺`) plus direct access to the live batch-add importer.
-- **Account Lifecycle & Security**: Registration, login, Google OAuth 2.0 integration, password updates (`/api/auth/changepassword`), and complete account deletion (`/api/auth/delete_my_account`). Custom mutation and cache-warming routes enforce a same-origin Origin/Referer check (the session cookie is `SameSite=Lax`).
+- **Account Lifecycle & Security**: Registration, login, Google OAuth 2.0 integration, password updates (`/api/auth/changepassword`), and complete account deletion (`/api/auth/delete_my_account`). Custom mutation and cache-warming routes enforce a same-origin Origin/Referer check (the session cookie is `SameSite=Lax`), and registration rejects reserved, test-only and disposable email domains.
 - **Multilingual Support (i18n)**: Full localization across 6 languages: English (`en`), French (`fr`), German (`de`), Spanish (`es`), Italian (`it`), and Portuguese (`pt`), with an active language selector.
 - **SEO & Legal**: Canonical URLs on the homepage, ticker pages and legal pages, a 301 redirect from `http://` and the apex host to `https://www.tickertracker.net`, dynamic `sitemap.xml`, `robots.txt` (public pages allowed, `/api/` blocked and marked `noindex`), Privacy Policy (`/privacy`), Terms of Service (`/terms`), and footer links to [Personal Page](https://www.louisvolant.com) and [Portfolio](https://www.louisvolant.com/portfolio).
 - **Privacy-Safe Caching**: Personalized routes (`/ticker/`, `/api/`) are forced dynamic, sent with `Cache-Control: private, no-store`, and excluded from Service Worker Cache Storage — your reference target and personal notes are never retained by a CDN, proxy or offline cache.
@@ -228,8 +228,8 @@ Covers:
 - Yahoo Finance client lifecycle: no module-scope instantiation, a single factory, exactly one client per batch, and a fresh client per single-quote call (guards the Workers cross-request promise race)
 - Market status: session-derived open / just-closed / opens-soon / closed states, viewer-timezone clock formatting, and opening-day labels that follow the rendered timezone
 - SEO crawl hygiene: canonical redirects for `http://` and the apex host, `robots.txt` rules, and the `noindex` header on `/api/` responses
-- Request security: same-origin Origin/Referer enforcement (site, apex/www, preview, localhost; cross-site and malformed origins rejected)
-- Registration route: a cross-site Origin is rejected before any account is created
+- Request security: same-origin Origin/Referer enforcement (site, apex/www, preview, localhost; cross-site and malformed origins rejected) and the registration email-domain policy (reserved RFC 2606 domains, test artefacts and disposable providers)
+- Registration route: reserved domain rejected without an account, real domain accepted, duplicate still 409, cross-site origin rejected, and the E2E bypass for `@example.com`
 
 ### Run End-to-End Tests (Playwright)
 ```bash
@@ -237,6 +237,7 @@ npm run test:e2e
 ```
 Covers:
 - Full user journey: registration, login, adding tickers by symbol and company label, tracking cost basis configuration, reordering tickers, viewing details and price history charts, password change, logout, re-authentication, and account deletion.
+- Registration policy: the Playwright server sets `E2E=1`, so the existing `@example.com` accounts still pass while a real deployment enforces the email-domain policy.
 - Multimodal search across tickers (`PUST`), company labels (`LVMH`, `AIRBUS`), and ISIN codes (`FR001400Q9V2`).
 - Batch add: a mixed comma/semicolon list adds the valid symbols, reports the unknown one, updates the watchlist, and is reachable from the single-search modal; the guest path works through IndexedDB.
 - Navigation and internationalization: privacy page, terms page, dynamic language switching across 6 locales, and footer verification (`Personal Page`, `Portfolio`).

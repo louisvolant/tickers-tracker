@@ -34,6 +34,9 @@ export default defineConfig({
       // command above and lives in .wrangler/state.
       AUTH_BACKEND: 'd1',
       MIGRATION_SECRET: 'test-migration-secret',
+      // The suite registers accounts with @example.com, which the public
+      // registration policy rejects. This flag is never set in production.
+      E2E: '1',
     },
   },
 });

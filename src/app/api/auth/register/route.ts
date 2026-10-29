@@ -6,6 +6,10 @@ import { getRequestOrigin } from '@/lib/env';
 import { EmailAlreadyExistsError } from '@/lib/users.types';
 import { getUserRepository } from '@/lib/users';
 import { assertSameOrigin } from '@/lib/sameOrigin';
+import {
+  isDisallowedEmailDomain,
+  isEmailDomainPolicyBypassed,
+} from '@/lib/emailDomainPolicy';
 
 export const runtime = 'nodejs';
 
@@ -25,6 +29,14 @@ export async function POST(request: NextRequest) {
     }
 
     const cleanEmail = email.trim().toLowerCase();
+
+    // Public endpoint: no CSRF token (anyone could fetch one), but bots and
+    // throwaway mailboxes must not create accounts. The e2e suite bypasses this
+    // through E2E=1; production never does.
+    if (!isEmailDomainPolicyBypassed() && isDisallowedEmailDomain(cleanEmail)) {
+      return NextResponse.json({ error: 'Please use a real email address.' }, { status: 400 });
+    }
+
     const cleanUsername = (username && typeof username === 'string' ? username.trim() : '') || cleanEmail.split('@')[0];
 
     const hashedPassword = await hashPassword(password);
