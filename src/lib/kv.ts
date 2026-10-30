@@ -178,3 +178,34 @@ export async function kvList(prefix: string = ''): Promise<string[]> {
 
   return keys;
 }
+
+/**
+ * List every key under a prefix, following KV pagination.
+ *
+ * `kvList()` returns a single page (up to 1,000 keys). The watchlist backfill
+ * and the transition scanner must not silently stop at the first page, so they
+ * use this instead. The local fallback returns everything in memory.
+ */
+export async function kvListAll(prefix: string = ''): Promise<string[]> {
+  const cfKV = getCloudflareKV();
+  if (cfKV) {
+    try {
+      const keys: string[] = [];
+      let cursor: string | undefined;
+
+      do {
+        const page = await cfKV.list({ prefix, cursor });
+        for (const key of page.keys ?? []) {
+          keys.push(key.name);
+        }
+        cursor = page.list_complete ? undefined : page.cursor;
+      } while (cursor);
+
+      return keys;
+    } catch (err) {
+      console.error(`KV list-all error with prefix ${prefix}:`, err);
+    }
+  }
+
+  return kvList(prefix);
+}

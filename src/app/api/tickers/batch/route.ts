@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/session';
-import { kvGet, kvPut } from '@/lib/kv';
 import { getQuotesBatched } from '@/lib/yahooFinance';
 import { UserTicker } from '@/lib/types';
 import { MAX_BATCH_TICKERS, parseTickerSymbols } from '@/lib/batchTickers';
 import { assertSameOrigin } from '@/lib/sameOrigin';
+import { getWatchlistRepository, nextTickerOrder } from '@/lib/tickerStore';
 
 export const runtime = 'nodejs';
 
@@ -46,8 +46,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const tickersKey = `user:tickers:${user.id}`;
-    const tickers = (await kvGet<UserTicker[]>(tickersKey)) || [];
+    const repo = getWatchlistRepository();
+    const tickers = await repo.list(user.id);
     const existing = new Set(tickers.map((ticker) => ticker.symbol.toUpperCase()));
 
     const skipped = symbols.filter((symbol) => existing.has(symbol));
@@ -78,18 +78,17 @@ export async function POST(request: NextRequest) {
         trackingValue: null,
         trackingCurrency: null,
         notes: '',
-        order: tickers.length + added.length,
+        order: nextTickerOrder(tickers) + added.length,
         createdAt: Date.now(),
         quote,
         exchangeTimezone: quote.exchangeTimezone ?? null,
       });
     }
 
-    // One read-modify-write for the whole batch. A concurrent edit from another
-    // tab is not merged (KV has no atomic append), which matches the single-add
-    // path and is acceptable at this scale.
+    // One batched insert for the whole paste. The unique (user_id, symbol)
+    // index still protects against a concurrent add of the same symbol.
     if (added.length > 0) {
-      await kvPut(tickersKey, [...tickers, ...added]);
+      await repo.addMany(user.id, added);
     }
 
     return NextResponse.json(

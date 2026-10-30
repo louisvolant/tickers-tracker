@@ -1,10 +1,10 @@
 // KV storage for price-alert arming state.
 //
-// Kept in its own per-user key rather than inside `user:tickers` for two
-// reasons:
+// Watchlist definitions now live in D1, but the arming state stays in its own
+// per-user KV key for two reasons:
 //
-// 1. The scanner writes it, the user edits tickers. Sharing one key would make
-//    each side read-modify-write the other's data and lose updates.
+// 1. The scanner writes it on a schedule, the user edits tickers in D1. Keeping
+//    the two stores separate avoids read-modify-write contention on definitions.
 // 2. A trigger that affects several tickers of the same user is a single write.
 //
 // The whole map is small (two booleans and two timestamps per ticker), so the

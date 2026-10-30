@@ -3,6 +3,7 @@ import { getSessionUser, clearSession } from '@/lib/session';
 import { kvDelete } from '@/lib/kv';
 import { getUserRepository } from '@/lib/users';
 import { assertSameOrigin } from '@/lib/sameOrigin';
+import { getWatchlistRepository } from '@/lib/tickerStore';
 
 export const runtime = 'nodejs';
 
@@ -19,8 +20,10 @@ async function handleDeleteAccount(request: NextRequest) {
     const repo = getUserRepository();
     const user = await repo.findById(sessionUser.id);
 
-    // Delete watchlist and per-user side data. Phase 4 will move these to D1
-    // with ON DELETE CASCADE; until then they are still KV keys.
+    // Delete watchlist rows through the repository (D1 cascade or KV delete),
+    // then the per-user side data that still lives in KV. The explicit KV
+    // delete also removes a legacy mirror left behind after the D1 cutover.
+    await getWatchlistRepository().deleteAll(sessionUser.id);
     await kvDelete(`user:tickers:${sessionUser.id}`);
     await kvDelete(`alert:state:${sessionUser.id}`);
     await kvDelete(`push:subs:${sessionUser.id}`);

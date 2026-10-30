@@ -22,7 +22,7 @@ A modern, lightning-fast stock and valuation multiples tracker built with Next.j
 - **Reliable Reorganization Mode (Flèches Haut / Bas)**: Select "Reorganize" (`Réorganisation`) from the display dropdown to enter ordering mode:
   - The right-hand price block on each mobile card is dynamically replaced with intuitive **Up / Down arrow buttons** (`ChevronUp` / `ChevronDown`).
   - Tapping up/down immediately reorders tickers without any touch gesture conflicts between scrolling, tapping, and long-presses.
-  - Position changes are saved instantly in local IndexedDB and synchronized to Cloudflare KV for registered accounts.
+  - Position changes are saved instantly in local IndexedDB and synchronized to D1 for registered accounts (mirrored to KV during the transition).
   - An inline banner provides single-tap confirmation (`OK`) to return to standard pricing view.
 - **1-Click Instant Ticker Addition & Bottom Add Button**: Adding tickers from search is immediate with a single click. In addition to the quick search `+` button, an explicit "+ Add Ticker" button is conveniently placed at the bottom of the watchlist right above the privacy notice.
 - **Batch Add (Multiple Tickers at Once)**: A "Batch add" button sits next to the bottom "Add Ticker" button, and the single-search modal links to the same flow. Paste symbols separated by commas, semicolons, spaces or new lines (up to 25); already-tracked symbols are skipped, unknown symbols are reported individually, and authenticated users are validated with a single batched Yahoo quote request. Guests get the same result locally through IndexedDB.
@@ -38,7 +38,7 @@ A modern, lightning-fast stock and valuation multiples tracker built with Next.j
 - **Multimodal Search (Ticker, Label & ISIN)**: Search stocks by symbol (e.g. `PUST`, `WPEA`), company name / ETF label (e.g. `LVMH`, `AIRBUS`, `SCHNEIDER`), or official ISIN codes (e.g. `FR0011871110`, `FR001400Q9V2`), supplemented by live Yahoo Finance search.
 - **Interactive Financial Stats & Charts**: Full-page ticker view at `/ticker/[symbol]` with historical price trends, 52-week ranges, dividend yields, EPS, market capitalization, and beta. Deep-linkable, browser-back friendly, and stable on mobile (no two-pass reflow).
 - **Flexible Display & Sorting Modes (Custom, Reorganize, Alphabetical, By Trading Exchange)**: Switch seamlessly with the dropdown button docked right on the title bar:
-  - **Custom Order (Liste ordonnée)**: User-defined sequence saved to IndexedDB and Cloudflare KV.
+  - **Custom Order (Liste ordonnée)**: User-defined sequence saved to IndexedDB and D1 (KV mirror during the transition).
   - **Reorganize (Réorganisation)**: Tactile up/down reorder buttons on each ticker card.
   - **Alphabetical (A → Z)**: Global alphabetical sorting by ticker symbol.
   - **By Trading Market (Par place de cotation)**: Intelligently groups tickers by exchange system (`Euronext Paris`, `NASDAQ`, `NYSE`, `Deutsche Börse XETRA`, `London Stock Exchange`, etc.) with stylish header badges, and sorts tickers alphabetically inside each exchange.
@@ -58,7 +58,7 @@ A modern, lightning-fast stock and valuation multiples tracker built with Next.j
 - **Multilingual Support (i18n)**: Full localization across 6 languages: English (`en`), French (`fr`), German (`de`), Spanish (`es`), Italian (`it`), and Portuguese (`pt`), with an active language selector.
 - **SEO & Legal**: Canonical URLs on the homepage, ticker pages and legal pages, a 301 redirect from `http://` and the apex host to `https://www.tickertracker.net`, dynamic `sitemap.xml`, `robots.txt` (public pages allowed, `/api/` blocked and marked `noindex`), Privacy Policy (`/privacy`), Terms of Service (`/terms`), and footer links to [Personal Page](https://www.louisvolant.com) and [Portfolio](https://www.louisvolant.com/portfolio).
 - **Privacy-Safe Caching**: Personalized routes (`/ticker/`, `/api/`) are forced dynamic, sent with `Cache-Control: private, no-store`, and excluded from Service Worker Cache Storage — your reference target and personal notes are never retained by a CDN, proxy or offline cache.
-- **Cloudflare Workers Ready**: Compatible with Cloudflare Workers / OpenNext with KV storage bindings (`KV`, `ticker_tracker_kv`), `keep_vars = true` preservation, and local development fallback.
+- **Cloudflare Workers Ready**: Compatible with Cloudflare Workers / OpenNext with D1 (`DB`), KV storage bindings (`KV`, `ticker_tracker_kv`), `keep_vars = true` preservation, and local development fallback.
 
 ---
 
@@ -160,6 +160,13 @@ MARKET_HOLIDAYS_MAX_AGE_DAYS="30"
 # Account storage backend: kv | dual | d1 (see "Account storage (D1)").
 # d1 is the production default; dual is only for the transition.
 AUTH_BACKEND="d1"
+
+# Watchlist storage backend: kv | dual | d1 (see "Watchlist storage (D1)").
+# Keep dual until the backfill verifier reports zero mismatches.
+TICKER_BACKEND="dual"
+
+# Temporary secret for POST /api/admin/migrate-tickers (wrangler secret put).
+MIGRATION_SECRET=""
 ```
 
 ### Cloudflare Workers KV & Wrangler Setup
@@ -221,6 +228,7 @@ Covers:
 - KV storage adapter (get, put, list, delete with fallbacks)
 - Stock catalog multimodal search by ticker, company label, and ISIN code
 - Watchlist tickers ordering and `% diff` variance computation
+- Watchlist storage: D1 CRUD, unique `(user_id, symbol)`, quote/alert round-trip, cascade delete, KV → D1 backfill and field-by-field verification, and the dual-write lazy import that cannot resurrect deleted tickers
 - Account management (password update and account deletion)
 - Yahoo Finance service and quote normalization
 - `fetchJsonWithRetry()` retry policy (transient vs. deterministic failures, backoff, give-up behaviour)
@@ -240,6 +248,7 @@ Covers:
 - Registration policy: the Playwright server sets `E2E=1`, so the existing `@example.com` accounts still pass while a real deployment enforces the email-domain policy.
 - Multimodal search across tickers (`PUST`), company labels (`LVMH`, `AIRBUS`), and ISIN codes (`FR001400Q9V2`).
 - Batch add: a mixed comma/semicolon list adds the valid symbols, reports the unknown one, updates the watchlist, and is reachable from the single-search modal; the guest path works through IndexedDB.
+- D1 watchlists: the full journey and batch/price-alert flows run against the local D1 binding through the dual transition adapter, including reorder and account deletion.
 - Navigation and internationalization: privacy page, terms page, dynamic language switching across 6 locales, and footer verification (`Personal Page`, `Portfolio`).
 - Price history resilience: transparent recovery when the details request fails on first open, correct loading state (never a premature "no chart points" message), non-empty `1MO` series on first render, and no chart bleed-through between two tickers.
 - Ticker details full page: real route navigation, back arrow to the dashboard, deep-linking and reload survival, browser back button, per-symbol page metadata, range switching, and stable single-column mobile layout with no reflow.
@@ -285,9 +294,11 @@ Yahoo Finance's unofficial endpoints are prone to IP rate limits and crumb expir
 
 ### Account storage (D1)
 
-Accounts are the first relational data set moved out of KV. `users` lives in D1;
-quotes, search, ATH/ATL and rates stay in KV as caches. The auth routes depend on
-`UserRepository` (`src/lib/users.types.ts`) and never touch a binding directly:
+Accounts and watchlists are the relational data sets moved out of KV. Quotes,
+search, ATH/ATL, rates, alert arming state and push subscriptions stay in KV.
+The auth routes depend on `UserRepository` (`src/lib/users.types.ts`) and the
+watchlist routes on `WatchlistRepository` (`src/lib/tickerStore.ts`); neither
+touches a binding directly:
 
 | Adapter | Behaviour |
 |---|---|
@@ -338,8 +349,56 @@ instead of surviving until its 30-day expiry.
 
 The unique index `users_email_unique` is the actual guard against concurrent
 duplicate registrations; the route maps the constraint error to `409` without a
-read-before-write check. Tickers, alert state and push subscriptions are still in
-KV and move in Phase 4 of `MIGRATION_STEPS.md`.
+read-before-write check.
+
+### Watchlist storage (D1)
+
+`tickers` and `ticker_migrations` live in D1 (`migrations/0002_tickers.sql`).
+Every field of the former `UserTicker` JSON object is preserved, including the
+alert thresholds, the last known quote (`quote_json`) and the original ticker id.
+Alert arming state (`alert:state:<userId>`) and push subscriptions
+(`push:subs:<userId>`) remain in KV because they are operational per-user data,
+not watchlist definitions.
+
+| Adapter | Behaviour |
+|---|---|
+| `KvWatchlistRepository` | `TICKER_BACKEND=kv`: the legacy `user:tickers:<userId>` array |
+| `D1WatchlistRepository` | `TICKER_BACKEND=d1`: SQL only |
+| `DualWatchlistRepository` | `TICKER_BACKEND=dual`: D1 is primary, KV is mirrored for rollback, and a user missing from D1 is lazily imported |
+
+`TICKER_BACKEND` defaults to `dual` when the `DB` binding is present and to `kv`
+otherwise, so unit tests and deployments without D1 keep working. If auth still
+runs on KV (`AUTH_BACKEND=kv`), watchlists stay on KV as well: `tickers.user_id`
+references `users(id)`.
+
+**Migration and verification**
+
+The backfill never deletes KV and is idempotent. Apply the schema, set
+`MIGRATION_SECRET` as a Worker secret, then run the backfill and its verifier:
+
+```bash
+npx wrangler d1 migrations apply tickertracker-d1 --remote
+npx wrangler secret put MIGRATION_SECRET
+
+curl -X POST -H "Authorization: Bearer $MIGRATION_SECRET" \
+  https://www.tickertracker.net/api/admin/migrate-tickers
+curl -X POST -H "Authorization: Bearer $MIGRATION_SECRET" \
+  "https://www.tickertracker.net/api/admin/migrate-tickers?verify=1"
+```
+
+The backfill returns `scannedKeys`, `scannedTickers`, `imported`, `skipped`,
+`failed` and `complete`. The verifier compares every KV ticker with its D1 row
+field by field and returns `matched`, `mismatches`, `missing`, `extraRows`,
+`failed` and `complete`. Switch to `TICKER_BACKEND=d1` only when the verifier
+reports `complete: true` with `mismatches: 0` and `failed: 0`. `extraRows` counts
+D1 tickers added after the backfill; it is informational and does not fail the
+verification.
+
+**Rollback**
+
+While `TICKER_BACKEND=dual`, set it back to `kv` and redeploy: the KV mirror is
+still current. After the contract phase, restore the KV backup or use D1 Time
+Travel. The backfill and verifier never delete KV data.
 
 ### Price-alert evaluation
 
@@ -351,7 +410,7 @@ Alerts are per-ticker and opt-in: each watchlist entry can carry an `alertHigh` 
 - **FX-aware.** A threshold entered in EUR on a USD listing is converted with the EUR-based rates before comparison; when no rate is available the ticker is skipped and its arming state is preserved.
 - **Cheap to persist.** The result reports `changed`, so the scanner only writes the arming state when a side actually flipped.
 
-Thresholds and arming state live in two different KV keys on purpose. `user:tickers:${userId}` holds the definitions and is written only by the user's requests; `alert:state:${userId}` holds `{ highArmed, lowArmed, highTriggeredAt, lowTriggeredAt }` per ticker and is written only by the scanner. Sharing one key would make each side read-modify-write the other and silently lose updates. A change to either threshold, or to the threshold currency, deletes the ticker's state entry: the next scan then runs the first-evaluation path, arms against the live quote and its FX rate, and cannot notify at save time.
+Thresholds and arming state live in two different stores on purpose. D1 `tickers` holds the definitions and is written only by the user's requests; `alert:state:${userId}` in KV holds `{ highArmed, lowArmed, highTriggeredAt, lowTriggeredAt }` per ticker and is written only by the scanner. Sharing one row/key would make each side read-modify-write the other and silently lose updates. A change to either threshold, or to the threshold currency, deletes the ticker's state entry: the next scan then runs the first-evaluation path, arms against the live quote and its FX rate, and cannot notify at save time.
 
 **Opt-in per ticker.** There is no bulk switch and no migration for existing accounts: each user has to open a ticker page and press *Enable price alerts* once for that ticker. The first activation calls `GET /api/tickers/athl`, prefills the two fields with the frozen ATH/ATL and saves immediately, so leaving the fields untouched keeps exactly those values. Editing a field marks that side as `custom`; clearing a field disables that side only.
 
@@ -365,13 +424,13 @@ The panel is rendered by `PriceAlertsSection` on `/ticker/[symbol]` and covers t
 
 What one scan does:
 
-1. Lists `user:tickers:*`, keeps the entries that opted into alerts and whose venue is inside a regular session at that instant. The timezone is read from the ticker (stored at add/alert time) and fed to `buildMarketSessions()`; no Yahoo call is made to decide whether a market is open. Unknown venues and futures are evaluated around the clock.
+1. Reads the armed watchlists from D1 (`listAllForScan()`), keeps the entries whose venue is inside a regular session at that instant. The timezone is read from the ticker (stored at add/alert time) and fed to `buildMarketSessions()`; no Yahoo call is made to decide whether a market is open. Unknown venues and futures are evaluated around the clock. In `TICKER_BACKEND=dual`, users not yet imported from KV are merged for the scan and imported on the fly, so an incomplete backfill cannot silently disable their alerts.
 2. Requests the distinct symbols with `getQuotesBatched()`: one HTTP call per 50 symbols, no KV read or write.
 3. Evaluates each ticker with `evaluateAlerts()` and writes `alert:state:${userId}` only when an arming side changed. A trigger that touches several tickers of the same user is one write.
 4. For each symbol that triggered, writes `quote:<SYM>` with a 24h TTL. The interactive path only considers a quote fresh for 30s, so this is not a freshness cache: it keeps a correct tier-4 fallback for a user who opens the app hours after the notification.
 5. Groups the events per user and sends one Web Push notification per user (`dispatchAlertNotifications`).
 
-Cost for 50 tickers with alerts on open venues, 5-minute cadence (~105 scans/day): ~105 Yahoo requests, one lock write per active scan (none when every venue is closed, because the lock is taken after planning), ~0 further writes on a quiet day, and two writes per trigger (state + quote). Each scan also reads one watchlist key per account (`user:tickers:<id>`), so the read budget scales with the number of accounts, not with the number of tickers. `kvList()` returns at most one page (1,000 keys): beyond that, the scan would need pagination or a symbol-to-users index.
+Cost for 50 tickers with alerts on open venues, 5-minute cadence (~105 scans/day): ~105 Yahoo requests, one lock write per active scan (none when every venue is closed, because the lock is taken after planning), ~0 further writes on a quiet day, and two writes per trigger (state + quote). The scan reads D1 with one indexed query (`listAllForScan()`), so the read budget scales with the number of armed tickers, not with the number of accounts. In `TICKER_BACKEND=dual` it still lists KV for users not yet imported; set `TICKER_BACKEND=d1` after the verification to drop that transition overhead.
 
 The trigger lives in `wrangler.toml` (`[triggers] crons = ["*/5 * * * *"]`). A non-atomic KV lock (`cron:alerts:lock`, 4 min TTL, never deleted) prevents a slow scan from stacking behind itself; it is only written once the plan is known to contain at least one open ticker, so nights and weekends cost zero writes. A duplicate remains harmless because the first run has already disarmed the side it fired.
 
@@ -505,6 +564,7 @@ Guarded by `tests/tickerCachePolicy.test.ts` (config-level header assertions) an
 - `PATCH /api/tickers`: Update tracking value, notes, or the two price-alert thresholds (`alertHigh`, `alertLow`, optional `alertCurrency`; `null` clears a side). Threshold changes delete the ticker's arming state so the next scan re-arms against the live quote.
 - `DELETE /api/tickers?id={id}`: Remove a ticker and auto-compact order indices.
 - `POST /api/tickers/reorder`: Persist custom ordering sequence of tickers.
+- `POST /api/admin/migrate-tickers`: Temporary KV → D1 backfill. `?verify=1` compares every KV ticker with D1 without writing. Requires `MIGRATION_SECRET`; returns counters only.
 
 ### Push Notifications
 - `GET /api/push/subscribe`: Return the VAPID public key and the number of subscribed devices. Authenticated.
@@ -520,4 +580,4 @@ Guarded by `tests/tickerCachePolicy.test.ts` (config-level header assertions) an
 - `GET /api/auth/callback/google`: Handle Google OAuth token exchange and session creation.
 - `POST /api/auth/changepassword`: Change password with verification of existing password.
 - `PATCH /api/auth/preferences`: Update the user's preferred reference currency (used for multi-currency tracking).
-- `DELETE /api/auth/delete_my_account`: Permanently delete the account, its D1 row and the associated KV side data.
+- `DELETE /api/auth/delete_my_account`: Permanently delete the account, its D1 tickers (or the KV watchlist) and the associated KV alert/push side data.

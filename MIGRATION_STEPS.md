@@ -372,6 +372,13 @@ references `user:by-email:` or `user:by-id:`.
 
 **Goal:** remove the array-in-KV watchlist and let the scanner query D1 directly.
 
+> **Implementation note (2026-10-30):** the `tickers` table,
+> `ticker_migrations` marker, `WatchlistRepository` (KV/D1/dual), the
+> KV → D1 backfill/verifier and the D1-backed scanner are implemented.
+> `alert_state` and `push_subscriptions` remain in KV: they are operational
+> per-user data, not watchlist definitions, and can move in a follow-up without
+> touching the row ids or the API contract.
+
 ### 9.1 Schema
 
 ```sql

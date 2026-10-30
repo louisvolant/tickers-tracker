@@ -4,10 +4,11 @@ compatibility_date = "2025-04-01"
 compatibility_flags = ["nodejs_compat"]
 keep_vars = true
 
-# Accounts are D1-only in production: the legacy KV namespace was empty when the
-# migration shipped, so there is nothing to dual-write or backfill.
+# Accounts are D1-only in production. Watchlists run in dual mode until the
+# KV -> D1 backfill has been verified, then switch TICKER_BACKEND to "d1".
 [vars]
 AUTH_BACKEND = "d1"
+TICKER_BACKEND = "dual"
 
 # Runs every five minutes. The handler filters venues that are closed, so a
 # 24/7 trigger costs no upstream call outside market hours.

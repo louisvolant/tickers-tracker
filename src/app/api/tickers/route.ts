@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/session';
-import { kvGet, kvPut } from '@/lib/kv';
 import { getQuote, getBatchQuotes } from '@/lib/yahooFinance';
 import { UserTicker } from '@/lib/types';
 import { ISO_FIAT_CURRENCIES } from '@/lib/currencies';
 import { parseAlertThreshold, validateAlertPair } from '@/lib/alerts';
 import { clearTickerAlertState } from '@/lib/alertStore';
 import { assertSameOrigin } from '@/lib/sameOrigin';
+import {
+  getWatchlistRepository,
+  nextTickerOrder,
+  TickerAlreadyExistsError,
+} from '@/lib/tickerStore';
 
 export const runtime = 'nodejs';
 
@@ -46,11 +50,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const tickersKey = `user:tickers:${user.id}`;
-    let tickers = (await kvGet<UserTicker[]>(tickersKey)) || [];
-
-    // Sort by order ascending
-    tickers.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const tickers = await getWatchlistRepository().list(user.id);
 
     if (tickers.length === 0) {
       return NextResponse.json({ tickers: [] });
@@ -106,8 +106,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `Could not find ticker symbol "${cleanSymbol}"` }, { status: 404 });
     }
 
-    const tickersKey = `user:tickers:${user.id}`;
-    const tickers = (await kvGet<UserTicker[]>(tickersKey)) || [];
+    const repo = getWatchlistRepository();
+    const tickers = await repo.list(user.id);
 
     // Check if symbol already in watchlist
     const existingIndex = tickers.findIndex((t) => t.symbol.toUpperCase() === cleanSymbol);
@@ -122,7 +122,7 @@ export async function POST(request: NextRequest) {
       trackingValue: parsedTrackingValue !== null ? Number(parsedTrackingValue.toFixed(4)) : null,
       trackingCurrency: parseTrackingCurrency(trackingCurrency),
       notes: typeof notes === 'string' ? notes.trim() : '',
-      order: tickers.length,
+      order: nextTickerOrder(tickers),
       createdAt: Date.now(),
       quote,
       // Persisted separately from the quote so the alert scanner can decide
@@ -130,8 +130,16 @@ export async function POST(request: NextRequest) {
       exchangeTimezone: quote.exchangeTimezone ?? null,
     };
 
-    tickers.push(newTicker);
-    await kvPut(tickersKey, tickers);
+    try {
+      await repo.add(user.id, newTicker);
+    } catch (err) {
+      // The unique (user_id, symbol) index catches concurrent adds that both
+      // passed the read above.
+      if (err instanceof TickerAlreadyExistsError) {
+        return NextResponse.json({ error: `Ticker ${cleanSymbol} is already in your watchlist` }, { status: 409 });
+      }
+      throw err;
+    }
 
     return NextResponse.json({ ticker: newTicker }, { status: 201 });
   } catch (err) {
@@ -169,15 +177,12 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Ticker ID is required' }, { status: 400 });
     }
 
-    const tickersKey = `user:tickers:${user.id}`;
-    const tickers = (await kvGet<UserTicker[]>(tickersKey)) || [];
-    const tickerIndex = tickers.findIndex((t) => t.id === id);
+    const repo = getWatchlistRepository();
+    const ticker = await repo.find(user.id, id);
 
-    if (tickerIndex === -1) {
+    if (!ticker) {
       return NextResponse.json({ error: 'Ticker not found' }, { status: 404 });
     }
-
-    const ticker = tickers[tickerIndex];
 
     if (trackingValue !== undefined) {
       if (trackingValue === null || trackingValue === '') {
@@ -268,7 +273,7 @@ export async function PATCH(request: NextRequest) {
       await clearTickerAlertState(user.id, ticker.id);
     }
 
-    await kvPut(tickersKey, tickers);
+    await repo.update(user.id, ticker);
 
     return NextResponse.json({ ticker });
   } catch (err) {
@@ -297,22 +302,16 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Ticker ID is required' }, { status: 400 });
     }
 
-    const tickersKey = `user:tickers:${user.id}`;
-    let tickers = (await kvGet<UserTicker[]>(tickersKey)) || [];
+    const repo = getWatchlistRepository();
+    const removed = await repo.remove(user.id, id);
 
-    const initialLength = tickers.length;
-    tickers = tickers.filter((t) => t.id !== id);
-
-    if (tickers.length === initialLength) {
+    if (!removed) {
       return NextResponse.json({ error: 'Ticker not found' }, { status: 404 });
     }
 
-    // Re-index orders
-    tickers.forEach((t, idx) => {
-      t.order = idx;
-    });
-
-    await kvPut(tickersKey, tickers);
+    // Re-index orders so the remaining positions stay contiguous.
+    const remaining = await repo.list(user.id);
+    await repo.reorder(user.id, remaining.map((ticker) => ticker.id));
 
     // The arming state would otherwise outlive the ticker and resurface if the
     // same ticker were added back later with a different configuration.

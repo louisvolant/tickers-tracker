@@ -11,7 +11,7 @@
 //   - one `quote:<SYM>` write per symbol that triggered (24h TTL), so the
 //     dashboard shows the trigger price when the user opens the notification.
 
-import { kvGet, kvList, kvPut } from './kv';
+import { kvGet, kvPut } from './kv';
 import { getAlertStateMap, putAlertStateMap } from './alertStore';
 import { alertsEnabled, evaluateAlerts } from './alerts';
 import { UserAlertEvent } from './alertNotification';
@@ -19,9 +19,7 @@ import { UserTicker } from './types';
 import { buildMarketSessions } from './marketCalendar';
 import { getExchangeRates } from './exchangeRates';
 import { getQuotesBatched } from './yahooFinance';
-
-/** Key prefix used by the watchlist API; the suffix is the user id. */
-const USER_TICKERS_PREFIX = 'user:tickers:';
+import { getWatchlistRepository } from './tickerStore';
 
 /**
  * How long a trigger price stays in the shared quote cache.
@@ -134,13 +132,7 @@ export function planScan(entries: AlertScanEntry[], now: number): AlertScanPlan 
  * afterwards cannot double-send if the process dies between the two steps.
  */
 export async function runAlertScan(now: number = Date.now()): Promise<AlertScanResult> {
-  const keys = await kvList(USER_TICKERS_PREFIX);
-  const entries: AlertScanEntry[] = [];
-
-  for (const key of keys) {
-    const tickers = (await kvGet<UserTicker[]>(key)) ?? [];
-    entries.push({ userId: key.slice(USER_TICKERS_PREFIX.length), tickers });
-  }
+  const entries = await getWatchlistRepository().listAllForScan();
 
   const plan = planScan(entries, now);
   if (plan.symbols.length === 0) {
