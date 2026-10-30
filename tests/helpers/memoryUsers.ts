@@ -30,7 +30,11 @@ export class MemoryUserRepository implements UserRepository {
     const email = normalizeEmail(user.email);
     if (await this.findByEmail(email)) throw new EmailAlreadyExistsError(email);
 
-    const record: UserRecord = { ...user, email };
+    const record: UserRecord = {
+      ...user,
+      email,
+      lastLoginAt: user.lastLoginAt ?? user.createdAt,
+    };
     this.users.set(record.id, record);
     return record;
   }
@@ -50,6 +54,11 @@ export class MemoryUserRepository implements UserRepository {
   async updatePassword(id: string, hashedPassword: string): Promise<void> {
     const user = this.users.get(id);
     if (user) user.hashedPassword = hashedPassword;
+  }
+
+  async updateLastLogin(id: string, at: number): Promise<void> {
+    const user = this.users.get(id);
+    if (user) user.lastLoginAt = at;
   }
 
   async linkGoogleAccount(email: string, googleId: string, username: string): Promise<UserRecord> {

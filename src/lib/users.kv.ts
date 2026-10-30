@@ -38,7 +38,11 @@ export class KvUserRepository implements UserRepository {
     const existing = await this.findByEmail(email);
     if (existing) throw new EmailAlreadyExistsError(email);
 
-    const record: UserRecord = { ...user, email };
+    const record: UserRecord = {
+      ...user,
+      email,
+      lastLoginAt: user.lastLoginAt ?? user.createdAt,
+    };
     await kvPut(emailKey(email), record);
     await kvPut(idKey(record.id), record);
     return record;
@@ -72,6 +76,15 @@ export class KvUserRepository implements UserRepository {
     if (!user) return;
 
     user.hashedPassword = hashedPassword;
+    await kvPut(emailKey(user.email), user);
+    await kvPut(idKey(user.id), user);
+  }
+
+  async updateLastLogin(id: string, at: number): Promise<void> {
+    const user = await this.findById(id);
+    if (!user) return;
+
+    user.lastLoginAt = at;
     await kvPut(emailKey(user.email), user);
     await kvPut(idKey(user.id), user);
   }

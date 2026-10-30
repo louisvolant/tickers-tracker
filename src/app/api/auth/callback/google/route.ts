@@ -73,13 +73,22 @@ export async function GET(request: NextRequest) {
 
     // 3. Find or create the account. The unique email index makes this safe
     // under concurrent callbacks; the dual backend mirrors the result to KV.
-    const user = await getUserRepository().linkGoogleAccount(
+    const repo = getUserRepository();
+    const user = await repo.linkGoogleAccount(
       cleanEmail,
       profile.id,
       profile.name || cleanEmail.split('@')[0]
     );
 
-    // 4. Build the session cookie and attach it to the redirect itself.
+    // 4. Record the sign-in. Best-effort so a database that has not applied
+    // migration 0003 still completes the OAuth flow.
+    try {
+      await repo.updateLastLogin(user.id, Date.now());
+    } catch (err) {
+      console.warn('Could not update last_login_at:', err);
+    }
+
+    // 5. Build the session cookie and attach it to the redirect itself.
     const session = await createSessionCookie(
       {
         id: user.id,

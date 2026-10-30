@@ -18,7 +18,7 @@ import {
 } from '../src/lib/tickerMigration';
 import { createSqliteDatabase, SqliteD1 } from './helpers/sqliteD1';
 
-const MIGRATIONS = ['0001_users.sql', '0002_tickers.sql'];
+const MIGRATIONS = ['0001_users.sql', '0002_tickers.sql', '0003_last_login_at.sql'];
 
 function migratedDatabase() {
   const db = createSqliteDatabase();

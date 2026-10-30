@@ -29,12 +29,21 @@ describe('User repository contract', () => {
     const created = await repo.create(newUser());
 
     assert.strictEqual(created.email, 'trader@example.com');
+    assert.strictEqual(created.lastLoginAt, CREATED_AT);
 
     const byId = await repo.findById('usr_1');
     const byEmail = await repo.findByEmail('  TRADER@example.COM ');
 
     assert.strictEqual(byId?.username, 'trader');
     assert.strictEqual(byEmail?.id, 'usr_1');
+  });
+
+  test('updates last_login_at on sign-in', async () => {
+    await repo.create(newUser());
+
+    await repo.updateLastLogin('usr_1', CREATED_AT + 10_000);
+
+    assert.strictEqual((await repo.findById('usr_1'))?.lastLoginAt, CREATED_AT + 10_000);
   });
 
   test('rejects a duplicate email case-insensitively', async () => {
@@ -167,16 +176,18 @@ describe('Dual-write account repository (transition)', () => {
     assert.strictEqual((await legacy.findById('usr_legacy'))?.googleId, 'google-1');
   });
 
-  test('password and currency updates are mirrored', async () => {
+  test('password, currency and last-login updates are mirrored', async () => {
     await repo.create(newUser());
 
     await repo.updatePassword('usr_1', 'pbkdf2$new');
     await repo.updatePreferredCurrency('usr_1', 'EUR');
+    await repo.updateLastLogin('usr_1', CREATED_AT + 20_000);
 
     for (const backend of [primary, legacy]) {
       const user = await backend.findById('usr_1');
       assert.strictEqual(user?.hashedPassword, 'pbkdf2$new');
       assert.strictEqual(user?.preferredCurrency, 'EUR');
+      assert.strictEqual(user?.lastLoginAt, CREATED_AT + 20_000);
     }
   });
 

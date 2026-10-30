@@ -66,7 +66,7 @@ function request(query = ''): NextRequest {
 describe('POST /api/admin/migrate-tickers', () => {
   test('backfills fake KV into fake D1, verifies it, and leaves KV untouched', async () => {
     const db = createSqliteDatabase();
-    for (const file of ['0001_users.sql', '0002_tickers.sql']) {
+    for (const file of ['0001_users.sql', '0002_tickers.sql', '0003_last_login_at.sql']) {
       db.exec(fs.readFileSync(path.join(process.cwd(), 'migrations', file), 'utf8'));
     }
     db.exec(
@@ -104,7 +104,7 @@ describe('POST /api/admin/migrate-tickers', () => {
 
   test('remaps an orphan legacy user id to the live D1 account by email', async () => {
     const db = createSqliteDatabase();
-    for (const file of ['0001_users.sql', '0002_tickers.sql']) {
+    for (const file of ['0001_users.sql', '0002_tickers.sql', '0003_last_login_at.sql']) {
       db.exec(fs.readFileSync(path.join(process.cwd(), 'migrations', file), 'utf8'));
     }
     db.exec(
@@ -147,8 +147,9 @@ describe('POST /api/admin/migrate-tickers', () => {
 
   test('rejects a missing or wrong secret before touching D1', async () => {
     const db = createSqliteDatabase();
-    db.exec(fs.readFileSync(path.join(process.cwd(), 'migrations', '0001_users.sql'), 'utf8'));
-    db.exec(fs.readFileSync(path.join(process.cwd(), 'migrations', '0002_tickers.sql'), 'utf8'));
+    for (const file of ['0001_users.sql', '0002_tickers.sql', '0003_last_login_at.sql']) {
+      db.exec(fs.readFileSync(path.join(process.cwd(), 'migrations', file), 'utf8'));
+    }
     setRuntimeEnv({ DB: new SqliteD1(db), KV: fakeKv({}), MIGRATION_SECRET: 'right-secret' });
 
     try {

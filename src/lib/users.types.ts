@@ -14,6 +14,7 @@ export interface NewUser {
   googleId?: string;
   preferredCurrency?: string;
   createdAt: number;
+  lastLoginAt?: number;
 }
 
 /** Thrown when the email (case-insensitive) is already registered. */
@@ -38,6 +39,8 @@ export interface UserRepository {
 
   updatePreferredCurrency(id: string, currency: string | null): Promise<void>;
   updatePassword(id: string, hashedPassword: string): Promise<void>;
+  /** Refresh the sign-in timestamp; callers must not fail a login if this does. */
+  updateLastLogin(id: string, at: number): Promise<void>;
   linkGoogleAccount(email: string, googleId: string, username: string): Promise<UserRecord>;
   delete(id: string): Promise<void>;
 }

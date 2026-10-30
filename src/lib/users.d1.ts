@@ -38,13 +38,13 @@ const SELECT_BY_ID = 'SELECT * FROM users WHERE id = ? LIMIT 1';
 const SELECT_BY_EMAIL = 'SELECT * FROM users WHERE email = ? COLLATE NOCASE LIMIT 1';
 const INSERT_USER = `
   INSERT INTO users
-    (id, email, username, hashed_password, google_id, preferred_currency, created_at)
-  VALUES (?, ?, ?, ?, ?, ?, ?)
+    (id, email, username, hashed_password, google_id, preferred_currency, created_at, last_login_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 `;
 const INSERT_USER_IF_ABSENT = `
   INSERT OR IGNORE INTO users
-    (id, email, username, hashed_password, google_id, preferred_currency, created_at)
-  VALUES (?, ?, ?, ?, ?, ?, ?)
+    (id, email, username, hashed_password, google_id, preferred_currency, created_at, last_login_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 `;
 
 /** Whether a D1/SQLite error is a uniqueness violation. */
@@ -66,6 +66,7 @@ function toRecord(row: any): UserRecord {
     googleId: row.google_id ?? undefined,
     preferredCurrency: row.preferred_currency ?? undefined,
     createdAt: Number(row.created_at),
+    lastLoginAt: row.last_login_at == null ? undefined : Number(row.last_login_at),
   };
 }
 
@@ -78,6 +79,7 @@ function insertValues(user: UserRecord): unknown[] {
     user.googleId ?? null,
     user.preferredCurrency ?? null,
     user.createdAt,
+    user.lastLoginAt ?? null,
   ];
 }
 
@@ -98,7 +100,11 @@ export class D1UserRepository implements UserRepository {
   }
 
   async create(user: NewUser): Promise<UserRecord> {
-    const record: UserRecord = { ...user, email: normalizeEmail(user.email) };
+    const record: UserRecord = {
+      ...user,
+      email: normalizeEmail(user.email),
+      lastLoginAt: user.lastLoginAt ?? user.createdAt,
+    };
 
     try {
       await this.db.prepare(INSERT_USER).bind(...insertValues(record)).run();
@@ -131,6 +137,13 @@ export class D1UserRepository implements UserRepository {
     await this.db
       .prepare('UPDATE users SET hashed_password = ? WHERE id = ?')
       .bind(hashedPassword, id)
+      .run();
+  }
+
+  async updateLastLogin(id: string, at: number): Promise<void> {
+    await this.db
+      .prepare('UPDATE users SET last_login_at = ? WHERE id = ?')
+      .bind(at, id)
       .run();
   }
 

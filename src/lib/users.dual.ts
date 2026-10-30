@@ -78,6 +78,17 @@ export class DualWriteUserRepository implements UserRepository {
     }
   }
 
+  async updateLastLogin(id: string, at: number): Promise<void> {
+    await this.primary.updateLastLogin(id, at);
+
+    try {
+      await this.legacy.updateLastLogin(id, at);
+    } catch (err) {
+      // D1 already has the timestamp; a legacy mirror failure must not fail login.
+      console.warn('KV mirror last-login update failed during dual-write:', err);
+    }
+  }
+
   async linkGoogleAccount(email: string, googleId: string, username: string): Promise<UserRecord> {
     // Resolve through both backends first, so a KV-only account keeps its id
     // when it is linked to Google.

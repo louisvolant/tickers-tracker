@@ -19,7 +19,8 @@ export async function POST(request: NextRequest) {
     }
 
     const cleanEmail = email.trim().toLowerCase();
-    const user = await getUserRepository().findByEmail(cleanEmail);
+    const repo = getUserRepository();
+    const user = await repo.findByEmail(cleanEmail);
 
     if (!user || !user.hashedPassword) {
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
@@ -28,6 +29,14 @@ export async function POST(request: NextRequest) {
     const isValid = await verifyPassword(password, user.hashedPassword);
     if (!isValid) {
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
+    }
+
+    // Best-effort: a local database that has not applied migration 0003 must
+    // never turn a valid credential check into a failed sign-in.
+    try {
+      await repo.updateLastLogin(user.id, Date.now());
+    } catch (err) {
+      console.warn('Could not update last_login_at:', err);
     }
 
     const sessionUser = {

@@ -148,6 +148,7 @@ export interface UserRecord {
   hashedPassword?: string;
   googleId?: string;
   createdAt: number;
+  lastLoginAt?: number; // Unix epoch in milliseconds, same unit as createdAt
   preferredCurrency?: string; // User's own reference currency (e.g. 'EUR')
 }
 

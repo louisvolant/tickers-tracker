@@ -230,6 +230,7 @@ Covers:
 - Watchlist tickers ordering and `% diff` variance computation
 - Watchlist storage: D1 CRUD, unique `(user_id, symbol)`, quote/alert round-trip, cascade delete, KV → D1 backfill and field-by-field verification, and the dual-write lazy import that cannot resurrect deleted tickers
 - Account management (password update and account deletion)
+- Sign-in tracking: `last_login_at` defaults to `created_at` on signup, is refreshed by password login and Google OAuth callbacks, and keeps sign-in working when the local schema has not been migrated
 - Yahoo Finance service and quote normalization
 - `fetchJsonWithRetry()` retry policy (transient vs. deterministic failures, backoff, give-up behaviour)
 - Cache policy for personalized routes: `next.config.mjs` header rules for `/ticker/:path*` (`private` + `no-store`, no `s-maxage`) and that static PWA assets stay cacheable
@@ -309,6 +310,13 @@ touches a binding directly:
 `AUTH_BACKEND` is unset by default: the app uses `dual` when the `DB` binding is
 present and `kv` otherwise, so local unit tests and deployments without D1 keep
 working unchanged.
+
+`users.last_login_at` (`migrations/0003_last_login_at.sql`) is a nullable Unix
+epoch in **milliseconds**, exactly like `created_at`. It is initialised to
+`created_at` on signup and refreshed on every successful password login and
+Google OAuth callback, so the administration dashboard can display it directly.
+The refresh is best-effort: a local database that has not applied migration 0003
+still allows a valid sign-in instead of returning a 500.
 
 **Setup**
 

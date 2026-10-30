@@ -41,6 +41,7 @@ export async function POST(request: NextRequest) {
 
     const hashedPassword = await hashPassword(password);
     const userId = 'usr_' + crypto.randomUUID().replace(/-/g, '');
+    const now = Date.now();
 
     const cleanPreferredCurrency =
       typeof preferredCurrency === 'string' && ISO_FIAT_CURRENCIES.has(preferredCurrency.toUpperCase())
@@ -56,7 +57,8 @@ export async function POST(request: NextRequest) {
         email: cleanEmail,
         username: cleanUsername,
         hashedPassword,
-        createdAt: Date.now(),
+        createdAt: now,
+        lastLoginAt: now,
         preferredCurrency: cleanPreferredCurrency,
       });
     } catch (err) {

@@ -71,7 +71,10 @@ describe('POST /api/auth/register', () => {
         assert.strictEqual(response.status, 201);
         const body = await response.json();
         assert.strictEqual(body.user.email, email);
-        assert.ok(await getUserRepository().findByEmail(email));
+
+        const stored = await getUserRepository().findByEmail(email);
+        assert.ok(stored);
+        assert.strictEqual(stored.lastLoginAt, stored.createdAt);
       } finally {
         await deleteAccount(email);
       }

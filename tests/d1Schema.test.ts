@@ -10,6 +10,10 @@ import path from 'node:path';
  */
 describe('D1 users migration', () => {
   const sql = readFileSync(path.join(process.cwd(), 'migrations/0001_users.sql'), 'utf-8');
+  const lastLoginSql = readFileSync(
+    path.join(process.cwd(), 'migrations/0003_last_login_at.sql'),
+    'utf-8'
+  );
 
   test('creates the users table', () => {
     assert.match(sql, /CREATE TABLE users/i);
@@ -29,5 +33,10 @@ describe('D1 users migration', () => {
       sql,
       /CREATE UNIQUE INDEX users_google_id_unique ON users\(google_id\) WHERE google_id IS NOT NULL/i
     );
+  });
+
+  test('adds a nullable last_login_at using the created_at timestamp unit', () => {
+    assert.match(lastLoginSql, /ALTER TABLE users ADD COLUMN last_login_at INTEGER/i);
+    assert.doesNotMatch(lastLoginSql, /NOT NULL/i);
   });
 });
