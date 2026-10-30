@@ -4,11 +4,12 @@ compatibility_date = "2025-04-01"
 compatibility_flags = ["nodejs_compat"]
 keep_vars = true
 
-# Accounts are D1-only in production. Watchlists run in dual mode until the
-# KV -> D1 backfill has been verified, then switch TICKER_BACKEND to "d1".
+# Accounts are D1-only in production. Watchlists were backfilled from KV and
+# verified on 2026-10-30; TICKER_BACKEND is now d1. Set it back to dual or kv
+# only for a rollback.
 [vars]
 AUTH_BACKEND = "d1"
-TICKER_BACKEND = "dual"
+TICKER_BACKEND = "d1"
 
 # Runs every five minutes. The handler filters venues that are closed, so a
 # 24/7 trigger costs no upstream call outside market hours.
