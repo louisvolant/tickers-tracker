@@ -6,6 +6,7 @@ import { NextRequest } from 'next/server';
 import type { UserTicker } from '../src/lib/types';
 import { POST } from '../src/app/api/admin/migrate-tickers/route';
 import { setRuntimeEnv } from '../src/lib/env';
+import { D1WatchlistRepository } from '../src/lib/tickerStore';
 import { createSqliteDatabase, SqliteD1 } from './helpers/sqliteD1';
 
 /**
@@ -96,6 +97,49 @@ describe('POST /api/admin/migrate-tickers', () => {
 
       // The migration is additive: KV still holds the source data for rollback.
       assert.ok(kv.store.has('user:tickers:usr_route'));
+    } finally {
+      setRuntimeEnv(null);
+    }
+  });
+
+  test('remaps an orphan legacy user id to the live D1 account by email', async () => {
+    const db = createSqliteDatabase();
+    for (const file of ['0001_users.sql', '0002_tickers.sql']) {
+      db.exec(fs.readFileSync(path.join(process.cwd(), 'migrations', file), 'utf8'));
+    }
+    db.exec(
+      "INSERT INTO users (id, email, username, created_at) VALUES ('usr_new', 'legacy@gmail.com', 'legacy', 1)"
+    );
+
+    const kv = fakeKv({
+      'user:by-id:usr_old': {
+        id: 'usr_old',
+        email: 'legacy@gmail.com',
+        username: 'legacy',
+        createdAt: 1,
+      },
+      'user:tickers:usr_old': [ticker()],
+    });
+    const d1 = new SqliteD1(db);
+    setRuntimeEnv({ DB: d1, KV: kv, MIGRATION_SECRET: 'migration-test-secret' });
+
+    try {
+      const backfill = await POST(request());
+      const backfillBody = await backfill.json();
+      assert.strictEqual(backfillBody.remappedKeys, 1);
+      assert.strictEqual(backfillBody.imported, 1);
+      assert.strictEqual(backfillBody.failed, 0);
+      assert.strictEqual(backfillBody.complete, true);
+
+      const verify = await POST(request('?verify=1'));
+      const verifyBody = await verify.json();
+      assert.strictEqual(verifyBody.remappedKeys, 1);
+      assert.strictEqual(verifyBody.missing, 0);
+      assert.strictEqual(verifyBody.mismatches, 0);
+      assert.strictEqual(verifyBody.complete, true);
+
+      const stored = await new D1WatchlistRepository(d1).list('usr_new');
+      assert.strictEqual(stored[0].symbol, 'AAPL');
     } finally {
       setRuntimeEnv(null);
     }

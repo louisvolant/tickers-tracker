@@ -210,6 +210,7 @@ describe('KV → D1 watchlist migration', () => {
       imported: 3,
       skipped: 0,
       failed: 0,
+      remappedKeys: 0,
       complete: true,
     });
 
@@ -225,6 +226,42 @@ describe('KV → D1 watchlist migration', () => {
     assert.strictEqual(second.imported, 0);
     assert.strictEqual(second.skipped, 3);
     assert.strictEqual(second.complete, true);
+  });
+
+  test('imports a legacy key into the live account resolved by email', async () => {
+    const db = migratedDatabase();
+    addUser(db, 'usr_new');
+    const repo = new D1WatchlistRepository(new SqliteD1(db));
+
+    // The current account already has AAPL under its own id. The legacy key has
+    // a stale AAPL id plus CW8.PA, which must not be lost.
+    await repo.add('usr_new', ticker({ id: 'current-aapl', symbol: 'AAPL' }));
+    const kv = source({
+      usr_old: [
+        ticker({ id: 'old-aapl', symbol: 'AAPL' }),
+        ticker({ id: 'old-cw8', symbol: 'CW8.PA' }),
+      ],
+    });
+    const resolve = async (legacyId: string) => (legacyId === 'usr_old' ? 'usr_new' : legacyId);
+
+    const backfill = await backfillTickers(repo, kv, resolve);
+    assert.strictEqual(backfill.remappedKeys, 1);
+    assert.strictEqual(backfill.imported, 1); // CW8.PA; stale AAPL is skipped
+    assert.strictEqual(backfill.skipped, 1);
+    assert.strictEqual(backfill.failed, 0);
+    assert.strictEqual(backfill.complete, true);
+
+    const d1 = await repo.list('usr_new');
+    assert.deepStrictEqual(d1.map((t) => t.symbol).sort(), ['AAPL', 'CW8.PA']);
+    assert.deepStrictEqual(d1.map((t) => t.id).sort(), ['current-aapl', 'old-cw8']);
+
+    const verification = await verifyTickers(repo, kv, resolve);
+    assert.strictEqual(verification.remappedKeys, 1);
+    assert.strictEqual(verification.symbolMatches, 2); // AAPL + CW8.PA
+    assert.strictEqual(verification.missing, 0);
+    assert.strictEqual(verification.mismatches, 0);
+    assert.strictEqual(verification.extraRows, 1); // current-aapl is D1-only
+    assert.strictEqual(verification.complete, true);
   });
 
   test('detects a changed row and a missing row', async () => {

@@ -387,12 +387,16 @@ curl -X POST -H "Authorization: Bearer $MIGRATION_SECRET" \
 ```
 
 The backfill returns `scannedKeys`, `scannedTickers`, `imported`, `skipped`,
-`failed` and `complete`. The verifier compares every KV ticker with its D1 row
-field by field and returns `matched`, `mismatches`, `missing`, `extraRows`,
-`failed` and `complete`. Switch to `TICKER_BACKEND=d1` only when the verifier
-reports `complete: true` with `mismatches: 0` and `failed: 0`. `extraRows` counts
-D1 tickers added after the backfill; it is informational and does not fail the
-verification.
+`failed`, `remappedKeys` and `complete`. A legacy KV user id that no longer
+exists in D1 is resolved by the email in `user:by-id:<id>`; its watchlist is
+imported into the live D1 account, and duplicate `(user_id, symbol)` rows keep
+the current D1 values. The verifier compares same-id keys field by field, and
+remapped keys by symbol (the live row wins for duplicate symbols). It returns
+`matched`, `mismatches`, `missing`, `extraRows`, `failed`, `remappedKeys`,
+`symbolMatches` and `complete`. Switch to `TICKER_BACKEND=d1` only when the
+verifier reports `complete: true` with `mismatches: 0` and `failed: 0`.
+`extraRows` counts D1 rows added after the backfill; it is informational and
+does not fail the verification.
 
 **Rollback**
 
