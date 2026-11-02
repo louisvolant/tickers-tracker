@@ -22,7 +22,7 @@ A modern, lightning-fast stock and valuation multiples tracker built with Next.j
 - **Reliable Reorganization Mode (Flèches Haut / Bas)**: Select "Reorganize" (`Réorganisation`) from the display dropdown to enter ordering mode:
   - The right-hand price block on each mobile card is dynamically replaced with intuitive **Up / Down arrow buttons** (`ChevronUp` / `ChevronDown`).
   - Tapping up/down immediately reorders tickers without any touch gesture conflicts between scrolling, tapping, and long-presses.
-  - Position changes are saved instantly in local IndexedDB and synchronized to D1 for registered accounts (mirrored to KV during the transition).
+  - Position changes are saved instantly in local IndexedDB and synchronized to D1 for registered accounts.
   - An inline banner provides single-tap confirmation (`OK`) to return to standard pricing view.
 - **1-Click Instant Ticker Addition & Bottom Add Button**: Adding tickers from search is immediate with a single click. In addition to the quick search `+` button, an explicit "+ Add Ticker" button is conveniently placed at the bottom of the watchlist right above the privacy notice.
 - **Batch Add (Multiple Tickers at Once)**: A "Batch add" button sits next to the bottom "Add Ticker" button, and the single-search modal links to the same flow. Paste symbols separated by commas, semicolons, spaces or new lines (up to 25); already-tracked symbols are skipped, unknown symbols are reported individually, and authenticated users are validated with a single batched Yahoo quote request. Guests get the same result locally through IndexedDB.
@@ -38,7 +38,7 @@ A modern, lightning-fast stock and valuation multiples tracker built with Next.j
 - **Multimodal Search (Ticker, Label & ISIN)**: Search stocks by symbol (e.g. `PUST`, `WPEA`), company name / ETF label (e.g. `LVMH`, `AIRBUS`, `SCHNEIDER`), or official ISIN codes (e.g. `FR0011871110`, `FR001400Q9V2`), supplemented by live Yahoo Finance search.
 - **Interactive Financial Stats & Charts**: Full-page ticker view at `/ticker/[symbol]` with historical price trends, 52-week ranges, dividend yields, EPS, market capitalization, and beta. Deep-linkable, browser-back friendly, and stable on mobile (no two-pass reflow).
 - **Flexible Display & Sorting Modes (Custom, Reorganize, Alphabetical, By Trading Exchange)**: Switch seamlessly with the dropdown button docked right on the title bar:
-  - **Custom Order (Liste ordonnée)**: User-defined sequence saved to IndexedDB and D1 (KV mirror during the transition).
+  - **Custom Order (Liste ordonnée)**: User-defined sequence saved to IndexedDB and D1.
   - **Reorganize (Réorganisation)**: Tactile up/down reorder buttons on each ticker card.
   - **Alphabetical (A → Z)**: Global alphabetical sorting by ticker symbol.
   - **By Trading Market (Par place de cotation)**: Intelligently groups tickers by exchange system (`Euronext Paris`, `NASDAQ`, `NYSE`, `Deutsche Börse XETRA`, `London Stock Exchange`, etc.) with stylish header badges, and sorts tickers alphabetically inside each exchange.
