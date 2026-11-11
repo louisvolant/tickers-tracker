@@ -273,7 +273,7 @@ Yahoo Finance's unofficial endpoints are prone to IP rate limits and crumb expir
    - **Tier 1**: `yf.quote()` for real-time market metrics.
    - **Tier 2**: `yf.quoteSummary()` for fundamental valuation modules (`summaryDetail`, `defaultKeyStatistics`, `price`).
    - **Tier 3**: Direct Yahoo Finance Chart API (`query1.finance.yahoo.com/v8/finance/chart`) with browser headers.
-   - **Tier 4**: Graceful stale-cache recovery if network requests are degraded.
+   - **Tier 4**: Graceful stale-cache recovery if network requests are degraded. Only the KV quote cache (written with a 2-minute TTL, served while younger than 30 s) is eligible: the quote stored with a watchlist row is a snapshot taken when the ticker was added, so it is never served as a live price. A symbol whose quote cannot be fetched shows no price for that cycle instead of replaying a week-old one (`attachQuotes()` in `src/lib/watchlistQuotes.ts`).
 3. **Client-Side Resilience**:
    - Details requests are issued through `fetchJsonWithRetry()`, which retries transient failures (`5xx`, `408`, `429`, network errors) up to 3 times with capped exponential backoff.
    - Deterministic client errors such as `404` fail fast instead of being retried.
@@ -318,6 +318,8 @@ turns those fields into an explicit answer:
   supplies the last extended bar and its date. The quote stays the primary source:
   a chart call per symbol per refresh would double the upstream request count and
   is the fastest route to a rate limit.
+- The 10-minute chart payload of `/api/tickers/details` is served with a freshly
+  resolved quote, so a cached chart cannot freeze the badge either.
 
 ### Account storage (D1)
 

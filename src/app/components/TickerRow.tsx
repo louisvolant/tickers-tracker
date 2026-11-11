@@ -43,7 +43,6 @@ export function TickerRow({
     return () => animation?.cancel();
   }, [flashKey]);
   const quote = ticker.quote;
-  const currentPrice = quote?.price ?? 0;
   const tracking = useMemo(() => resolveTracking(ticker, quote, rates), [ticker, quote, rates]);
   const hasTracking = tracking.hasTracking;
   const hasDiff = hasTracking && tracking.conversionAvailable && tracking.diffPercent !== null;
@@ -103,7 +102,7 @@ export function TickerRow({
       {/* Live Market Price & Day Change */}
       <td className="py-1.5 px-3 text-right">
         <div className="text-sm font-bold text-white">
-          {formatCurrency(currentPrice, quote?.currency)}
+          {formatCurrency(quote?.price, quote?.currency)}
         </div>
         <div
           className={`flex items-center justify-end gap-1 text-[11px] font-semibold ${

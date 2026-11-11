@@ -41,6 +41,7 @@ import {
   DEFAULT_TICKERS,
 } from '@/lib/indexedDb';
 import { UserTicker, TickerQuote } from '@/lib/types';
+import { attachQuotes } from '@/lib/watchlistQuotes';
 import { BatchAddResult } from '@/lib/batchTickers';
 import {
   TrendingUp,
@@ -268,10 +269,7 @@ function Dashboard() {
             const quotes: Record<string, TickerQuote> = data.quotes || {};
             await saveLocalQuotes(quotes);
 
-            const updated = currentTickers.map((t) => ({
-              ...t,
-              quote: quotes[t.symbol.toUpperCase()] || t.quote || null,
-            }));
+            const updated = attachQuotes(currentTickers, quotes);
             setTickers(updated);
             await saveLocalTickers(updated);
           }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/session';
 import { getQuote, getBatchQuotes } from '@/lib/yahooFinance';
+import { attachQuotes } from '@/lib/watchlistQuotes';
 import { UserTicker } from '@/lib/types';
 import { ISO_FIAT_CURRENCIES } from '@/lib/currencies';
 import { parseAlertThreshold, validateAlertPair } from '@/lib/alerts';
@@ -56,14 +57,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ tickers: [] });
     }
 
-    // Enrich with quotes
+    // Enrich with quotes. Symbols Yahoo could not answer for are left without a
+    // price on purpose: the stored snapshot is not a live quote (see
+    // attachQuotes), and replaying it is what froze the extended-session badge.
     const symbols = tickers.map((t) => t.symbol);
     const quotes = await getBatchQuotes(symbols);
 
-    const enrichedTickers = tickers.map((t) => ({
-      ...t,
-      quote: quotes[t.symbol.toUpperCase()] || t.quote || null,
-    }));
+    const enrichedTickers = attachQuotes(tickers, quotes);
 
     return NextResponse.json({ tickers: enrichedTickers });
   } catch (err) {

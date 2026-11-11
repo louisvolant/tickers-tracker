@@ -46,7 +46,6 @@ export function TickerCard({
     return () => animation?.cancel();
   }, [flashKey]);
   const quote = ticker.quote;
-  const currentPrice = quote?.price ?? 0;
   const isPositiveToday = (quote?.changePercent ?? 0) >= 0;
 
   const tracking = useMemo(() => resolveTracking(ticker, quote, rates), [ticker, quote, rates]);
@@ -157,7 +156,7 @@ export function TickerCard({
       ) : (
         <div className="text-right shrink-0">
           <div className="text-base font-black text-white leading-tight">
-            {formatCurrency(currentPrice, quote?.currency)}
+            {formatCurrency(quote?.price, quote?.currency)}
           </div>
           <div
             className={`flex items-center justify-end gap-1 text-xs font-semibold leading-tight mt-0.5 ${

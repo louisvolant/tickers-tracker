@@ -532,7 +532,13 @@ export async function getTickerDetails(
 
   const cacheKey = `details:${cleanSymbol}:${range}`;
   const cached = await kvGet<TickerDetails>(cacheKey);
-  if (cached) return cached;
+  if (cached) {
+    // The chart may be ten minutes old, but the extended-session badge must not
+    // be: the quote is re-resolved (30 s KV cache) and swapped into the payload
+    // so a cached chart can never freeze the pre-market / after-hours figure.
+    const freshQuote = await fetchQuoteWithClient(createYahooFinanceClient(), cleanSymbol);
+    return freshQuote ? { ...cached, quote: freshQuote } : cached;
+  }
 
   try {
     // A single request-scoped client serves the quote, the chart and the

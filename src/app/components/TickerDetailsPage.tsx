@@ -345,7 +345,7 @@ export function TickerDetailsPage({ symbol }: { symbol: string }) {
             <div className="p-3 bg-slate-950/60 border border-slate-800/80 rounded-xl">
               <span className="text-[11px] font-medium text-slate-400 block mb-1">{t('details.currentPrice')}</span>
               <div className="text-lg sm:text-xl font-bold text-white">
-                {formatCurrency(currentPrice, quote?.currency)}
+                {formatCurrency(quote?.price, quote?.currency)}
               </div>
               <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
                 <span
