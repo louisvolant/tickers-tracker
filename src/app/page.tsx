@@ -25,6 +25,7 @@ import {
   groupTickersByExchange,
 } from '@/lib/displayModes';
 import { MOVED_TICKER_STORAGE_KEY } from '@/lib/utils';
+import { useActivePolling } from '@/lib/useActivePolling';
 import { filterTickersByQuery } from '@/lib/watchlistSearch';
 import {
   SortColumn,
@@ -287,6 +288,16 @@ function Dashboard() {
   useEffect(() => {
     refreshData();
   }, [refreshData]);
+
+  /**
+   * Active-only auto-refresh.
+   *
+   * Every 30 s while the tab is visible and the user interacted in the last
+   * 5 minutes; the interval is destroyed (not just skipped) when the tab is
+   * hidden, the browser goes offline or the user walks away, and one immediate
+   * refresh runs when it comes back.
+   */
+  useActivePolling(refreshData, { enabled: tickers.length > 0 });
 
   /**
    * Reorder Handlers

@@ -4,7 +4,7 @@ A modern, lightning-fast stock and valuation multiples tracker built with Next.j
 
 ## Key Features
 
-- **Real-Time & 30s Cached Market Quotes**: Powered by Yahoo Finance (`yahoo-finance2`), covering US stocks, European equities (e.g. `MC.PA`, `AIR.PA`), and index futures (e.g. `NQ=F`, `ES=F`) with an optimized 30-second KV server cache for rapid sync.
+- **Real-Time & 30s Cached Market Quotes**: Powered by Yahoo Finance (`yahoo-finance2`), covering US stocks, European equities (e.g. `MC.PA`, `AIR.PA`), and index futures (e.g. `NQ=F`, `ES=F`) with an optimized 30-second KV server cache for rapid sync. The watchlist re-polls every 30 seconds while the tab is visible, the browser online and the user active; a hidden tab or an idle user (no interaction for 5 minutes) stops polling entirely and gets one immediate refresh when it comes back.
 - **Valuation Multiples with Color Tiers**: Instantly displays **Current P/E** (`trailingPE`) and **Forward P/E** (`forwardPE`) on both mobile cards and desktop tables. Forward P/E is dynamically colored by valuation tier:
   - Deep value (< 15x): emerald green
   - Moderate value (15x - 20x): teal
@@ -278,6 +278,7 @@ Yahoo Finance's unofficial endpoints are prone to IP rate limits and crumb expir
    - Details requests are issued through `fetchJsonWithRetry()`, which retries transient failures (`5xx`, `408`, `429`, network errors) up to 3 times with capped exponential backoff.
    - Deterministic client errors such as `404` fail fast instead of being retried.
    - This matters most on a cold cache (first open of a symbol, typically outside market hours) where Yahoo Finance is most likely to answer with a transient error. Previously a single failed response was rendered as "no chart points available" and the blank series was then cached, so the chart only recovered after manually switching range.
+   - Quote polling is gated (`isWatchlistPollingActive()` in `src/lib/polling.ts`): a 30 s interval, created only while the document is visible, the browser online and the last interaction (pointer, keyboard, scroll, touch) less than 5 minutes old. The interval is torn down - not merely skipped - when the gate closes, an in-flight refresh prevents overlapping ticks, and reopening the gate fires one immediate refresh so returning to the tab never shows the prices from when it was left.
 4. **Request-Scoped Yahoo Finance Client (Workers correctness)**:
    - `yahoo-finance2` memoises the Yahoo crumb promise inside the per-client cookie jar, so a **module-scope client is shared by every concurrent request in a Workers isolate**.
    - The request that created the promise resolves; the others await a promise belonging to an already torn-down request context. The runtime cancels their continuations, the handler never responds, and Cloudflare kills the request with HTTP 500 and `outcome: "exception"` ("code had hung and would never generate a response").
