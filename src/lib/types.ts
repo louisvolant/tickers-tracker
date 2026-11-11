@@ -1,3 +1,9 @@
+/** Extended session an `extendedChangePercent` figure belongs to. */
+export type ExtendedSessionType = 'pre' | 'post';
+
+/** Where the extended-session figures were derived from. */
+export type ExtendedSessionSource = 'quote' | 'computed' | 'chart';
+
 export interface TickerQuote {
   symbol: string;
   name: string;
@@ -26,12 +32,22 @@ export interface TickerQuote {
   preMarketPrice?: number | null;
   preMarketChange?: number | null;
   preMarketChangePercent?: number | null;
+  /** Epoch ms of the last pre-market tick reported by Yahoo. */
+  preMarketTime?: number | null;
   postMarketPrice?: number | null;
   postMarketChange?: number | null;
   postMarketChangePercent?: number | null;
-  extendedType?: 'pre' | 'post' | null;
+  /** Epoch ms of the last after-hours tick reported by Yahoo. */
+  postMarketTime?: number | null;
+  extendedType?: ExtendedSessionType | null;
   extendedPrice?: number | null;
   extendedChangePercent?: number | null;
+  /** Epoch ms of the tick behind the extended figures (null when unknown). */
+  extendedAsOf?: number | null;
+  /** True only while that extended session is open right now. */
+  extendedLive?: boolean;
+  /** How the extended figures were derived. */
+  extendedSource?: ExtendedSessionSource | null;
   /** IANA timezone of the venue, e.g. Europe/Paris. */
   exchangeTimezone?: string | null;
   /** Upcoming regular sessions (absolute times). Null when no calendar is known. */

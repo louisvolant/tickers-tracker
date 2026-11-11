@@ -2,6 +2,13 @@ import YahooFinance from 'yahoo-finance2';
 import { kvGet, kvPut } from './kv';
 import { normalizeCurrency } from './currencies';
 import { buildMarketSessions } from './marketCalendar';
+import {
+  applyExtendedSession,
+  extendedSessionInputFromQuote,
+  extendedSessionNeedsChartFallback,
+  resolveExtendedSession,
+  toEpochMs,
+} from './extendedSession';
 import { TickerQuote, TickerSearchResult, ChartPoint, TickerDetails, ForwardConsensusData, EarningsEstimatePeriod } from './types';
 
 /**
@@ -84,37 +91,22 @@ function normalizeQuote(raw: any, symbolOverride?: string): TickerQuote {
     forwardPE = Number((price / epsForwardRaw).toFixed(2));
   }
 
-  // Extended session calculation (Pre-market / After-market / Futures)
-  let extendedType: 'pre' | 'post' | null = null;
-  let extendedPrice: number | null = null;
-  let extendedChange: number | null = null;
-  let extendedChangePercent: number | null = null;
-
-  const prePrice = raw.preMarketPrice !== undefined && raw.preMarketPrice !== null ? Number(raw.preMarketPrice) / factor : null;
-  const preChange = raw.preMarketChange !== undefined && raw.preMarketChange !== null ? Number(raw.preMarketChange) / factor : null;
-  const prePercent = raw.preMarketChangePercent !== undefined && raw.preMarketChangePercent !== null ? Number(raw.preMarketChangePercent) : null;
-
-  const postPrice = raw.postMarketPrice !== undefined && raw.postMarketPrice !== null ? Number(raw.postMarketPrice) / factor : null;
-  const postChange = raw.postMarketChange !== undefined && raw.postMarketChange !== null ? Number(raw.postMarketChange) / factor : null;
-  const postPercent = raw.postMarketChangePercent !== undefined && raw.postMarketChangePercent !== null ? Number(raw.postMarketChangePercent) : null;
+  // Extended session (Pre-market / After-hours / Futures)
+  //
+  // The raw pre/post fields are kept as Yahoo reports them, but which one is
+  // *current* is decided by resolveExtendedSession(): Yahoo still serves the
+  // last session's fields after it closed (Friday's after-hours tick survives
+  // the weekend), so their presence says nothing about their freshness.
+  const toPrice = (value: unknown): number | null => {
+    const n = value === null || value === undefined ? null : Number(value);
+    return n === null || !Number.isFinite(n) ? null : Number((n / factor).toFixed(4));
+  };
+  const toPercent = (value: unknown): number | null => {
+    const n = value === null || value === undefined ? null : Number(value);
+    return n === null || !Number.isFinite(n) ? null : Number(n.toFixed(2));
+  };
 
   const marketState = raw.marketState || null;
-
-  if (marketState === 'PRE' || (prePercent !== null && marketState !== 'POST')) {
-    if (prePercent !== null) {
-      extendedType = 'pre';
-      extendedPrice = prePrice ? Number(prePrice.toFixed(4)) : null;
-      extendedChange = preChange ? Number(preChange.toFixed(4)) : null;
-      extendedChangePercent = Number(prePercent.toFixed(2));
-    }
-  } else if (marketState === 'POST' || postPercent !== null) {
-    if (postPercent !== null) {
-      extendedType = 'post';
-      extendedPrice = postPrice ? Number(postPrice.toFixed(4)) : null;
-      extendedChange = postChange ? Number(postChange.toFixed(4)) : null;
-      extendedChangePercent = Number(postPercent.toFixed(2));
-    }
-  }
 
   const fiftyTwoWeekHigh = raw.fiftyTwoWeekHigh !== undefined && raw.fiftyTwoWeekHigh !== null ? Number(raw.fiftyTwoWeekHigh) / factor : null;
   const fiftyTwoWeekLow = raw.fiftyTwoWeekLow !== undefined && raw.fiftyTwoWeekLow !== null ? Number(raw.fiftyTwoWeekLow) / factor : null;
@@ -124,7 +116,7 @@ function normalizeQuote(raw: any, symbolOverride?: string): TickerQuote {
   const dayHigh = raw.regularMarketDayHigh !== undefined && raw.regularMarketDayHigh !== null ? Number(raw.regularMarketDayHigh) / factor : null;
   const dayLow = raw.regularMarketDayLow !== undefined && raw.regularMarketDayLow !== null ? Number(raw.regularMarketDayLow) / factor : null;
 
-  return {
+  const quote: TickerQuote = {
     symbol: sym,
     name: raw.shortName || raw.longName || sym || 'Unknown',
     price: Number(price.toFixed(4)),
@@ -149,16 +141,21 @@ function normalizeQuote(raw: any, symbolOverride?: string): TickerQuote {
     marketSessions,
     updatedAt: Date.now(),
     marketState,
-    preMarketPrice: prePrice ? Number(prePrice.toFixed(4)) : null,
-    preMarketChange: preChange ? Number(preChange.toFixed(4)) : null,
-    preMarketChangePercent: prePercent !== null ? Number(prePercent.toFixed(2)) : null,
-    postMarketPrice: postPrice ? Number(postPrice.toFixed(4)) : null,
-    postMarketChange: postChange ? Number(postChange.toFixed(4)) : null,
-    postMarketChangePercent: postPercent !== null ? Number(postPercent.toFixed(2)) : null,
-    extendedType,
-    extendedPrice,
-    extendedChangePercent,
+    preMarketPrice: toPrice(raw.preMarketPrice),
+    preMarketChange: toPrice(raw.preMarketChange),
+    preMarketChangePercent: toPercent(raw.preMarketChangePercent),
+    preMarketTime: toEpochMs(raw.preMarketTime),
+    postMarketPrice: toPrice(raw.postMarketPrice),
+    postMarketChange: toPrice(raw.postMarketChange),
+    postMarketChangePercent: toPercent(raw.postMarketChangePercent),
+    postMarketTime: toEpochMs(raw.postMarketTime),
   };
+
+  // The extended figures are computed from the price and timestamp Yahoo reports,
+  // not taken on faith from its percentage, and are flagged live or historical.
+  applyExtendedSession(quote, resolveExtendedSession(extendedSessionInputFromQuote(quote)));
+
+  return quote;
 }
 
 /**
@@ -204,6 +201,69 @@ async function fetchChartDirect(symbol: string): Promise<any | null> {
 }
 
 /**
+ * Last pre/post bar of the intraday chart.
+ *
+ * Used when the quote advertises an open extended session but carries no usable
+ * price for it (illiquid symbols). `includePrePost` is what makes the chart
+ * return the extended ticks, and the bar date is the only trustworthy "as of"
+ * available in that case.
+ */
+async function fetchExtendedBar(
+  yf: YahooFinanceClient,
+  symbol: string,
+  type: 'pre' | 'post'
+): Promise<{ type: 'pre' | 'post'; price: number; asOf: number } | null> {
+  try {
+    const chart = await yf.chart(symbol, {
+      period1: new Date(Date.now() - 2 * 86_400_000),
+      interval: '1m',
+      includePrePost: true,
+      return: 'array',
+    });
+
+    const period = chart?.meta?.currentTradingPeriod?.[type];
+    if (!period) return null;
+
+    const start = toEpochMs(period.start);
+    const end = toEpochMs(period.end);
+    if (start === null || end === null) return null;
+
+    let last: { price: number; asOf: number } | null = null;
+    for (const bar of chart.quotes ?? []) {
+      const asOf = toEpochMs(bar?.date);
+      if (asOf === null || asOf < start || asOf > end) continue;
+      const close = bar?.close === null || bar?.close === undefined ? null : Number(bar.close);
+      if (close === null || !Number.isFinite(close)) continue;
+      last = { price: close, asOf };
+    }
+
+    return last ? { type, ...last } : null;
+  } catch (err) {
+    console.debug(`Extended-hours chart fallback failed for ${symbol}:`, err);
+    return null;
+  }
+}
+
+/**
+ * Fill in a live extended session the quote could not describe, using at most one
+ * extra chart request and only in the degraded case (state says the session is
+ * open, the fields are empty). The quote API is the primary source: one chart call
+ * per symbol per refresh would double the upstream request count and is the
+ * fastest way to get rate-limited.
+ */
+async function applyChartExtendedFallback(yf: YahooFinanceClient, quote: TickerQuote): Promise<void> {
+  if (!extendedSessionNeedsChartFallback(quote)) return;
+
+  const bar = await fetchExtendedBar(yf, quote.symbol, quote.extendedType as 'pre' | 'post');
+  if (!bar) return;
+
+  applyExtendedSession(
+    quote,
+    resolveExtendedSession({ ...extendedSessionInputFromQuote(quote), chart: bar })
+  );
+}
+
+/**
  * Fetch a single ticker quote with multi-tiered resilience and KV caching,
  * reusing the caller's request-scoped client.
  */
@@ -225,6 +285,7 @@ async function fetchQuoteWithClient(
     const raw = await yf.quote(cleanSymbol);
     if (raw && raw.symbol) {
       const quote = normalizeQuote(raw, cleanSymbol);
+      await applyChartExtendedFallback(yf, quote);
       await kvPut(cacheKey, quote, { expirationTtl: QUOTE_CACHE_TTL_SEC * 4 });
       return quote;
     }

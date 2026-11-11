@@ -293,6 +293,32 @@ Yahoo Finance's unofficial endpoints are prone to IP rate limits and crumb expir
    - The in-progress monthly candle is dropped before computing the extremes. Keeping it would persist a reference equal to the current price, so the alert would fire the moment it is created.
    - The snapshot is cached in KV for 24h (to absorb repeated clicks, not to stay fresh) and falls back to the quote's 52-week high/low when the history is empty.
 
+### Extended-session resolution (pre-market / after-hours)
+
+Yahoo's quote keeps the `preMarket*` and `postMarket*` fields after the session they
+describe has closed: a Friday after-hours tick is still served on Sunday, and once
+the after-hours window ends the fields sit unchanged until the next session opens
+(04:00 ET for US venues). Their presence therefore says nothing about their
+freshness, which is why the badge used to freeze on a percentage from another
+session while Yahoo Finance itself already showed a moving pre-market figure.
+
+`resolveExtendedSession()` (`src/lib/extendedSession.ts`, pure and unit-tested)
+turns those fields into an explicit answer:
+
+- `PRE` / `POST` → that session's own fields only. The other side is never
+  borrowed, so a morning pre-market tick cannot reappear after the close.
+- Any other state (`PREPRE`, `POSTPOST`, `CLOSED`, `REGULAR`) → the most recent
+  session is still returned for context, but flagged `live: false` and dated with
+  the tick's own timestamp, so the UI greys it and prints "as of <time>".
+- The percentage is recomputed from the extended price against the last regular
+  price instead of trusting `preMarketChangePercent` (Yahoo's field is only used
+  when the reference price is missing).
+- When the state says a session is open but the fields are empty (illiquid
+  symbols), one `yf.chart(symbol, { interval: '1m', includePrePost: true })` call
+  supplies the last extended bar and its date. The quote stays the primary source:
+  a chart call per symbol per refresh would double the upstream request count and
+  is the fastest route to a rate limit.
+
 ### Account storage (D1)
 
 Accounts and watchlists are the relational data sets moved out of KV. Quotes,
