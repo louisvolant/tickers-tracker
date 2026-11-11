@@ -59,6 +59,21 @@ export function formatMultiple(value: number | null | undefined): string {
 }
 
 /**
+ * Short, viewer-local timestamp of an extended-session tick, e.g. "Fri 22:00".
+ *
+ * Returns an empty string when the timestamp is unknown, so callers can simply
+ * skip the "as of" suffix rather than printing a placeholder date.
+ */
+export function formatExtendedTimestamp(asOf: number | null | undefined, locale: string): string {
+  if (asOf === null || asOf === undefined || !Number.isFinite(asOf)) return '';
+  return new Intl.DateTimeFormat(locale, {
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(asOf);
+}
+
+/**
  * Sleep helper used to space out retries.
  */
 function sleep(ms: number): Promise<void> {

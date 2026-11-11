@@ -47,6 +47,7 @@
     "fwdPe": "Fwd P/E",
     "preMarket": "Pré-marché (Futures)",
     "afterHours": "Après-bourse (Post-market)",
+    "extendedAsOf": "au {time}",
     "extendedSession": "Session étendue",
     "filterLabel": "Filtrer par marché",
     "filterAll": "Tous les marchés",

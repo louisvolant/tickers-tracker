@@ -1,12 +1,13 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef } from 'react';
-import { ArrowUp, ArrowDown, ChevronUp, ChevronDown, BarChart2, Edit2, Trash2, Sunrise, Moon } from 'lucide-react';
+import { ArrowUp, ArrowDown, ChevronUp, ChevronDown, BarChart2, Edit2, Trash2 } from 'lucide-react';
 import { UserTicker } from '@/lib/types';
-import { formatCurrency, formatPercent, formatMultiple, getExtendedSessionBadgeClass, getForwardPeBadgeClass, getCurrentPeBadgeClass, flashMovedElement } from '@/lib/utils';
+import { formatCurrency, formatPercent, formatMultiple, getForwardPeBadgeClass, getCurrentPeBadgeClass, flashMovedElement } from '@/lib/utils';
 import { resolveTracking } from '@/lib/tracking';
 import { useI18n } from '@/context/I18nContext';
 import { useCurrencyRates } from '@/context/CurrencyContext';
+import { ExtendedSessionBadge } from './ExtendedSessionBadge';
 
 interface TickerRowProps {
   ticker: UserTicker;
@@ -50,14 +51,8 @@ export function TickerRow({
   const isPositiveDiff = diffPercent >= 0;
   const isPositiveToday = (quote?.changePercent ?? 0) >= 0;
 
-  // Extended session (Pre-market 🌅 / After-hours 🌙 / Futures)
-  const hasExtended =
-    quote?.extendedChangePercent !== null &&
-    quote?.extendedChangePercent !== undefined;
-  const isPreMarket = quote?.extendedType === 'pre';
-  const extendedPercent = quote?.extendedChangePercent ?? 0;
-  const isPositiveExtended = extendedPercent >= 0;
-  const extendedLabel = isPreMarket ? t('watchlist.preMarket') : t('watchlist.afterHours');
+  // Extended session (Pre-market 🌅 / After-hours 🌙 / Futures) is rendered by
+  // ExtendedSessionBadge, which greys out a session that is already over.
 
   return (
     <tr
@@ -120,22 +115,9 @@ export function TickerRow({
             <span>{formatPercent(quote?.changePercent)}</span>
           </span>
 
-          {/* Extended session indicator with intensified red when below -0.20% */}
-          {hasExtended && (
-            <span
-              title={`${extendedLabel}: ${formatPercent(extendedPercent)}`}
-              className={`inline-flex items-center gap-0.5 text-[10px] font-bold px-1 py-0.2 rounded border ${getExtendedSessionBadgeClass(
-                extendedPercent
-              )}`}
-            >
-              {isPreMarket ? (
-                <Sunrise className="w-2.5 h-2.5 shrink-0" />
-              ) : (
-                <Moon className="w-2.5 h-2.5 shrink-0" />
-              )}
-              <span>{formatPercent(extendedPercent)}</span>
-            </span>
-          )}
+          {/* Extended session indicator: live during the session, greyed and dated
+              once it is over. */}
+          <ExtendedSessionBadge quote={quote} />
         </div>
       </td>
 

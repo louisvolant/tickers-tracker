@@ -1,13 +1,14 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef } from 'react';
-import { ArrowUp, ArrowDown, ChevronUp, ChevronDown, Sunrise, Moon } from 'lucide-react';
+import { ArrowUp, ArrowDown, ChevronUp, ChevronDown } from 'lucide-react';
 import { UserTicker } from '@/lib/types';
-import { formatCurrency, formatPercent, formatMultiple, getExtendedSessionBadgeClass, getForwardPeBadgeClass, getCurrentPeBadgeClass, flashMovedElement } from '@/lib/utils';
+import { formatCurrency, formatPercent, formatMultiple, getForwardPeBadgeClass, getCurrentPeBadgeClass, flashMovedElement } from '@/lib/utils';
 import { resolveTracking } from '@/lib/tracking';
 import { useI18n } from '@/context/I18nContext';
 import { useCurrencyRates } from '@/context/CurrencyContext';
 import { MarketStatusBadge } from './MarketStatusBadge';
+import { ExtendedSessionBadge } from './ExtendedSessionBadge';
 
 interface TickerCardProps {
   ticker: UserTicker;
@@ -53,12 +54,6 @@ export function TickerCard({
   const isPositiveDiff = (tracking.diffPercent ?? 0) >= 0;
 
   // Extended session (Pre-market 🌅 / After-hours 🌙 / Futures)
-  const hasExtended =
-    quote?.extendedChangePercent !== null &&
-    quote?.extendedChangePercent !== undefined;
-  const isPreMarket = quote?.extendedType === 'pre';
-  const extendedPercent = quote?.extendedChangePercent ?? 0;
-  const extendedLabel = isPreMarket ? t('watchlist.preMarket') : t('watchlist.afterHours');
 
   return (
     <div
@@ -174,22 +169,8 @@ export function TickerCard({
               <span>{formatPercent(quote?.changePercent)}</span>
             </span>
 
-            {/* Extended session indicator with intensified red when below -0.20% */}
-            {hasExtended && (
-              <span
-                title={`${extendedLabel}: ${formatPercent(extendedPercent)}`}
-                className={`inline-flex items-center gap-0.5 text-[10px] font-bold px-1 py-0.2 rounded border ${getExtendedSessionBadgeClass(
-                  extendedPercent
-                )}`}
-              >
-                {isPreMarket ? (
-                  <Sunrise className="w-2.5 h-2.5 shrink-0" />
-                ) : (
-                  <Moon className="w-2.5 h-2.5 shrink-0" />
-                )}
-                <span>{formatPercent(extendedPercent)}</span>
-              </span>
-            )}
+            {/* Extended session indicator: live during the session, greyed once over */}
+            <ExtendedSessionBadge quote={quote} variant="card" />
           </div>
         </div>
       )}

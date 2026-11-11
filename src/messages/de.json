@@ -47,6 +47,7 @@
     "fwdPe": "KGV fwd.",
     "preMarket": "Vorbörslich",
     "afterHours": "Nachbörslich",
+    "extendedAsOf": "Stand {time}",
     "extendedSession": "Erweiterte Handelszeit",
     "filterLabel": "Nach Markt filtern",
     "filterAll": "Alle Märkte",

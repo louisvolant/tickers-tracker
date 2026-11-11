@@ -16,8 +16,6 @@ import {
   AlertTriangle,
   Users,
   Layers,
-  Sunrise,
-  Moon,
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { UserTicker, TickerDetails } from '@/lib/types';
@@ -26,7 +24,6 @@ import {
   formatPercent,
   formatMultiple,
   formatCompactNumber,
-  getExtendedSessionBadgeClass,
   getForwardPeBadgeClass,
   getForwardPeCardClass,
   getCurrentPeCardClass,
@@ -40,6 +37,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useCurrencyRates } from '@/context/CurrencyContext';
 import { EditTrackingModal } from './EditTrackingModal';
 import { MarketStatusBadge } from './MarketStatusBadge';
+import { ExtendedSessionBadge } from './ExtendedSessionBadge';
 import { PriceAlertsSection } from './PriceAlertsSection';
 
 type TimeRange = '1d' | '5d' | '1mo' | '6mo' | '1y' | '5y';
@@ -233,11 +231,6 @@ export function TickerDetailsPage({ symbol }: { symbol: string }) {
   const isPositiveDiff = diffPercent >= 0;
 
   // Extended session (Pre-market 🌅 / After-hours 🌙 / Futures)
-  const hasExtended =
-    quote?.extendedChangePercent !== null && quote?.extendedChangePercent !== undefined;
-  const isPreMarket = quote?.extendedType === 'pre';
-  const extendedPercent = quote?.extendedChangePercent ?? 0;
-  const extendedLabel = isPreMarket ? t('watchlist.preMarket') : t('watchlist.afterHours');
 
   // 52-week position calculation
   let rangePercent = 50;
@@ -363,24 +356,9 @@ export function TickerDetailsPage({ symbol }: { symbol: string }) {
                   {formatPercent(quote?.changePercent)} {t('watchlist.today')}
                 </span>
 
-                {/* Extended session indicator */}
-                {hasExtended && (
-                  <span
-                    title={`${extendedLabel}: ${formatPercent(extendedPercent)}`}
-                    className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded border ${getExtendedSessionBadgeClass(
-                      extendedPercent
-                    )}`}
-                  >
-                    {isPreMarket ? (
-                      <Sunrise className="w-3 h-3 shrink-0" />
-                    ) : (
-                      <Moon className="w-3 h-3 shrink-0" />
-                    )}
-                    <span>
-                      {extendedLabel} {formatPercent(extendedPercent)}
-                    </span>
-                  </span>
-                )}
+                {/* Extended session indicator: live during the session, otherwise
+                    greyed and dated with the tick it comes from. */}
+                <ExtendedSessionBadge quote={quote} variant="page" />
               </div>
             </div>
 
