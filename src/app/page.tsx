@@ -60,7 +60,7 @@ import {
 } from 'lucide-react';
 
 function Dashboard() {
-  const { user, openAuthModal } = useAuth();
+  const { user, loading: authLoading, openAuthModal, refreshUser } = useAuth();
   const { t } = useI18n();
   const { rates } = useCurrencyRates();
   const router = useRouter();
@@ -243,8 +243,14 @@ function Dashboard() {
     setRefreshing(true);
     try {
       if (user) {
-        // Authenticated: fetch user tickers from server KV
+        // Authenticated: fetch user tickers from server
         const res = await fetch('/api/tickers', { cache: 'no-store' });
+        if (res.status === 401 || res.status === 403) {
+          // Session has expired or been invalidated server-side; reconcile auth
+          // while leaving the cached IndexedDB watchlist displayed on screen.
+          await refreshUser();
+          return;
+        }
         if (res.ok && currentVersion === requestVersionRef.current) {
           const data = await res.json();
           if (Array.isArray(data.tickers)) {
@@ -283,11 +289,12 @@ function Dashboard() {
         setRefreshing(false);
       }
     }
-  }, [user]);
+  }, [user, refreshUser]);
 
   useEffect(() => {
+    if (authLoading) return;
     refreshData();
-  }, [refreshData]);
+  }, [authLoading, refreshData]);
 
   /**
    * Active-only auto-refresh.
@@ -297,7 +304,7 @@ function Dashboard() {
    * hidden, the browser goes offline or the user walks away, and one immediate
    * refresh runs when it comes back.
    */
-  useActivePolling(refreshData, { enabled: tickers.length > 0 });
+  useActivePolling(refreshData, { enabled: !authLoading && tickers.length > 0 });
 
   /**
    * Reorder Handlers
@@ -566,7 +573,7 @@ function Dashboard() {
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Guest Banner if not logged in */}
-        {!user && (
+        {!authLoading && !user && (
           <div className="mb-6 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-emerald-950/40 border border-slate-800 p-5 sm:p-6 shadow-xl relative overflow-hidden">
             <div className="relative z-10 max-w-2xl">
               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 mb-3">
@@ -629,7 +636,7 @@ function Dashboard() {
         )}
 
         {/* Interactive Magic Demo Playground for prospective users */}
-        {!user && (
+        {!authLoading && !user && (
           <MagicDemoPlayground
             onRegisterClick={() => openAuthModal('register')}
             onBatchAddClick={() => setBatchModalOpen(true)}

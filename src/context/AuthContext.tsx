@@ -1,7 +1,12 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useCallback, useContext, useState, useEffect } from 'react';
 import { SessionUser } from '@/lib/types';
+import {
+  getCachedUser,
+  reconcileSessionCheck,
+  saveCachedUser,
+} from '@/lib/authSession';
 
 interface AuthContextType {
   user: SessionUser | null;
@@ -24,25 +29,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authModalTab, setAuthModalTab] = useState<'login' | 'register'>('login');
 
-  const refreshUser = async () => {
+  const refreshUser = useCallback(async () => {
+    const currentCached = getCachedUser();
     try {
       const res = await fetch('/api/auth/me', { cache: 'no-store' });
+      let payload: { user?: unknown } | null = null;
       if (res.ok) {
-        const data = await res.json();
-        setUser(data.user || null);
-      } else {
-        setUser(null);
+        try {
+          payload = await res.json();
+        } catch {
+          payload = null;
+        }
       }
+
+      const reconciled = reconcileSessionCheck({
+        currentUser: currentCached,
+        status: res.status,
+        payload,
+      });
+
+      if (reconciled.shouldPersist && reconciled.user) {
+        saveCachedUser(reconciled.user);
+      } else if (reconciled.shouldClear) {
+        saveCachedUser(null);
+      }
+      setUser(reconciled.user);
     } catch {
-      setUser(null);
+      const reconciled = reconcileSessionCheck({
+        currentUser: currentCached,
+        status: null,
+        networkError: true,
+      });
+      setUser(reconciled.user);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
+    // Hydrate the last known authenticated session immediately so reopening
+    // the PWA never flashes the guest login banner while /api/auth/me is in flight.
+    const cached = getCachedUser();
+    if (cached) {
+      setUser(cached);
+      setLoading(false);
+    }
     refreshUser();
-  }, []);
+  }, [refreshUser]);
 
   const openAuthModal = (tab: 'login' | 'register' = 'login') => {
     setAuthModalTab(tab);
@@ -64,6 +97,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!res.ok) {
         return { success: false, error: data.error || 'Failed to sign in' };
       }
+      saveCachedUser(data.user);
       setUser(data.user);
       closeAuthModal();
       return { success: true };
@@ -83,6 +117,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!res.ok) {
         return { success: false, error: data.error || 'Failed to create account' };
       }
+      saveCachedUser(data.user);
       setUser(data.user);
       closeAuthModal();
       return { success: true };
@@ -95,6 +130,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
     } finally {
+      saveCachedUser(null);
       setUser(null);
     }
   };
