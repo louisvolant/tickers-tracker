@@ -3,6 +3,7 @@ import { createSessionCookie } from '@/lib/session';
 import { getUserRepository } from '@/lib/users';
 
 import { getEnvVar, getRequestOrigin } from '@/lib/env';
+import { OAUTH_TXN_COOKIE, OAUTH_TXN_COOKIE_PATH, parseOAuthTransaction } from '@/lib/oauth';
 
 export const runtime = 'nodejs';
 
@@ -18,28 +19,58 @@ function redirectTo(url: string): NextResponse {
   return response;
 }
 
+/**
+ * Redirect and consume the one-time OAuth transaction cookie in the same
+ * response, so a state/verifier pair can never be replayed.
+ */
+function redirectToAndClearTxn(url: string, secure: boolean): NextResponse {
+  const response = redirectTo(url);
+  response.cookies.set(OAUTH_TXN_COOKIE, '', {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure,
+    path: OAUTH_TXN_COOKIE_PATH,
+    maxAge: 0,
+  });
+  return response;
+}
+
 export async function GET(request: NextRequest) {
   // Deliberately no assertSameOrigin(): this is the provider's cross-site
   // redirect back from Google, not a browser-initiated mutation. The one-time
-  // OAuth code exchanged below is the credential that authorizes the callback.
+  // OAuth code and the state cookie below authorize the callback.
   const { searchParams } = new URL(request.url);
   const code = searchParams.get('code');
+  const state = searchParams.get('state');
   const origin = getRequestOrigin(request);
   const redirectUri = `${origin}/api/auth/callback/google`;
+  const secure = origin.startsWith('https://');
+
+  // The transaction (state + PKCE verifier) was issued by /api/auth/google
+  // and stored in a cookie scoped to this route. The echoed `state` must
+  // match: this rejects login CSRF (an attacker completing their own OAuth
+  // login in the victim's browser) and any callback that was not started by
+  // this browser.
+  const txn = parseOAuthTransaction(request.cookies.get(OAUTH_TXN_COOKIE)?.value);
+  if (!txn || !state || state !== txn.state) {
+    return redirectToAndClearTxn(`${origin}?auth_error=invalid_state`, secure);
+  }
 
   if (!code) {
-    return redirectTo(`${origin}?auth_error=missing_code`);
+    return redirectToAndClearTxn(`${origin}?auth_error=missing_code`, secure);
   }
 
   const clientId = getEnvVar('GOOGLE_CLIENT_ID');
   const clientSecret = getEnvVar('GOOGLE_CLIENT_SECRET');
 
   if (!clientId || !clientSecret) {
-    return redirectTo(`${origin}?auth_error=google_credentials_missing`);
+    return redirectToAndClearTxn(`${origin}?auth_error=google_credentials_missing`, secure);
   }
 
   try {
-    // 1. Exchange code for access token
+    // 1. Exchange code for access token. The PKCE verifier proves this
+    // browser started the flow: a code intercepted elsewhere exchanges to
+    // nothing without it.
     const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -48,13 +79,14 @@ export async function GET(request: NextRequest) {
         client_id: clientId,
         client_secret: clientSecret,
         redirect_uri: redirectUri,
+        code_verifier: txn.codeVerifier,
         grant_type: 'authorization_code',
       }),
     });
 
     if (!tokenRes.ok) {
       console.error('Google token exchange error:', await tokenRes.text());
-      return redirectTo(`${origin}?auth_error=token_exchange_failed`);
+      return redirectToAndClearTxn(`${origin}?auth_error=token_exchange_failed`, secure);
     }
 
     const { access_token } = (await tokenRes.json()) as { access_token: string };
@@ -65,7 +97,7 @@ export async function GET(request: NextRequest) {
     });
 
     if (!userRes.ok) {
-      return redirectTo(`${origin}?auth_error=userinfo_failed`);
+      return redirectToAndClearTxn(`${origin}?auth_error=userinfo_failed`, secure);
     }
 
     const profile = (await userRes.json()) as { id: string; email: string; name?: string };
@@ -96,14 +128,14 @@ export async function GET(request: NextRequest) {
         username: user.username,
         preferredCurrency: user.preferredCurrency,
       },
-      origin.startsWith('https://')
+      secure
     );
 
-    const response = redirectTo(`${origin}?auth_success=true`);
+    const response = redirectToAndClearTxn(`${origin}?auth_success=true`, secure);
     response.cookies.set(session.name, session.value, session.options);
     return response;
   } catch (err) {
     console.error('Google auth callback error:', err);
-    return redirectTo(`${origin}?auth_error=oauth_internal_error`);
+    return redirectToAndClearTxn(`${origin}?auth_error=oauth_internal_error`, secure);
   }
 }
