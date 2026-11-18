@@ -54,7 +54,7 @@ A modern, lightning-fast stock and valuation multiples tracker built with Next.j
   - **Dual Responsive Architecture**: Split-screen side-by-side mode on desktop (`md:`), and an automatic morphing view with tactile comparison tabs (`Raw input` ⇄ `Enriched cards`) on mobile.
   - **3 Realistic 1-Click Presets**: Preloaded with Broker notes (`AAPL, MSFT...`), PEA & US mix (`MC.PA, AIR.PA, TSLA...`), and unstructured forum discussions.
   - **Zero-Friction CTAs & Replay**: One-click replay (`↺`) plus direct access to the live batch-add importer.
-- **Account Lifecycle & Security**: Registration, login, Google OAuth 2.0 integration, password updates (`/api/auth/changepassword`), and complete account deletion (`/api/auth/delete_my_account`). Custom mutation and cache-warming routes enforce a same-origin Origin/Referer check (the session cookie is `SameSite=Lax`), and registration rejects reserved, test-only and disposable email domains.
+- **Account Lifecycle & Security**: Registration, login, Google OAuth 2.0 integration, password updates (`/api/auth/changepassword`), and complete account deletion (`/api/auth/delete_my_account`). The session cookie is signed with a `SESSION_SECRET` that fails closed in production: the app refuses to sign sessions with a missing, too-short, or previously-committed default secret, so a leaked fallback can never forge a session. Custom mutation and cache-warming routes enforce a same-origin Origin/Referer check (the session cookie is `SameSite=Lax`), and registration rejects reserved, test-only and disposable email domains.
 - **Multilingual Support (i18n)**: Full localization across 6 languages: English (`en`), French (`fr`), German (`de`), Spanish (`es`), Italian (`it`), and Portuguese (`pt`), with an active language selector.
 - **SEO & Legal**: Canonical URLs on the homepage, ticker pages and legal pages, a 301 redirect from `http://` and the apex host to `https://www.tickertracker.net`, dynamic `sitemap.xml`, `robots.txt` (public pages allowed, `/api/` blocked and marked `noindex`), Privacy Policy (`/privacy`), Terms of Service (`/terms`), and footer links to [Personal Page](https://www.louisvolant.com) and [Portfolio](https://www.louisvolant.com/portfolio).
 - **Privacy-Safe Caching**: Personalized routes (`/ticker/`, `/api/`) are forced dynamic, sent with `Cache-Control: private, no-store`, and excluded from Service Worker Cache Storage — your reference target and personal notes are never retained by a CDN, proxy or offline cache.
@@ -134,7 +134,9 @@ npm run deploy   # runs the build itself, then wrangler deploy
 Set the following environment variables in your `.env.local` for local development or in Cloudflare Workers settings:
 
 ```ini
-# Session cookie secret (32+ chars generated via: openssl rand -base64 32)
+# Session cookie secret (32+ chars). Generate with: openssl rand -base64 48
+# Required in production: the app refuses to sign sessions when it is missing,
+# too short, or equal to the default that was once committed to this repository.
 SESSION_SECRET="your-secure-session-secret"
 
 # Google OAuth 2.0 Credentials

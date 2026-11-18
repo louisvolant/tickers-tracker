@@ -34,8 +34,12 @@ async function withPolicyEnforced<T>(fn: () => Promise<T>): Promise<T> {
   const env = process.env as Record<string, string | undefined>;
   const previousE2E = env.E2E;
   const previousNodeEnv = env.NODE_ENV;
+  const previousSessionSecret = env.SESSION_SECRET;
   delete env.E2E;
   env.NODE_ENV = 'production';
+  // A production-like environment must configure the session secret: the
+  // app refuses to sign sessions without one (fail closed).
+  env.SESSION_SECRET = 'test-session-secret-key-32b-long-abc';
 
   try {
     return await fn();
@@ -44,6 +48,8 @@ async function withPolicyEnforced<T>(fn: () => Promise<T>): Promise<T> {
     else env.E2E = previousE2E;
     if (previousNodeEnv === undefined) delete env.NODE_ENV;
     else env.NODE_ENV = previousNodeEnv;
+    if (previousSessionSecret === undefined) delete env.SESSION_SECRET;
+    else env.SESSION_SECRET = previousSessionSecret;
   }
 }
 
@@ -117,8 +123,11 @@ describe('POST /api/auth/register', () => {
     const env = process.env as Record<string, string | undefined>;
     const previousE2E = env.E2E;
     const previousNodeEnv = env.NODE_ENV;
+    const previousSessionSecret = env.SESSION_SECRET;
     env.E2E = '1';
     env.NODE_ENV = 'production';
+    // Production-like environment: the session secret must be configured.
+    env.SESSION_SECRET = 'test-session-secret-key-32b-long-abc';
     const email = `e2e_${Date.now()}@example.com`;
 
     try {
@@ -132,6 +141,8 @@ describe('POST /api/auth/register', () => {
       else env.E2E = previousE2E;
       if (previousNodeEnv === undefined) delete env.NODE_ENV;
       else env.NODE_ENV = previousNodeEnv;
+      if (previousSessionSecret === undefined) delete env.SESSION_SECRET;
+      else env.SESSION_SECRET = previousSessionSecret;
     }
   });
 });

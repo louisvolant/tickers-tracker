@@ -8,6 +8,22 @@ import { getEnvVar } from './env';
 const SESSION_COOKIE_NAME = 'tt_session';
 const SESSION_TTL_SEC = 30 * 24 * 60 * 60; // 30 days
 
+// The value this repository used to ship as a hardcoded fallback secret. It is
+// public knowledge, so a deployment still using it must be treated as
+// compromised and rotated, never silently accepted.
+const LEAKED_DEFAULT_SESSION_SECRET = 'ticker-tracker-production-super-secret-key-32b';
+const MIN_SESSION_SECRET_LENGTH = 32;
+
+// Ephemeral fallback for development and tests only: generated once per
+// process, never persisted, never valid in production.
+let ephemeralDevSecret: string | null = null;
+
+function randomSecret(): string {
+  return Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) =>
+    b.toString(16).padStart(2, '0')
+  ).join('');
+}
+
 export interface SessionCookieOptions {
   httpOnly: boolean;
   secure: boolean;
@@ -23,8 +39,45 @@ export interface SessionCookie {
   options: SessionCookieOptions;
 }
 
+/**
+ * Resolve the HMAC secret used to sign session cookies.
+ *
+ * Fail closed: a session token signed with a guessed or publicly known secret
+ * grants access to any account, so the configured value must exist, be at
+ * least 32 characters long, and never be the default that used to be
+ * committed in this repository. In production a missing secret is a hard
+ * error; outside production an unconfigured environment falls back to an
+ * ephemeral per-process random secret so `next dev` keeps working.
+ */
 export function getSessionSecret(): string {
-  return getEnvVar('SESSION_SECRET') || 'ticker-tracker-production-super-secret-key-32b';
+  const secret = getEnvVar('SESSION_SECRET');
+
+  if (secret) {
+    if (secret === LEAKED_DEFAULT_SESSION_SECRET) {
+      throw new Error(
+        'SESSION_SECRET is still set to the value that was committed in this repository. ' +
+          'Rotate it now (wrangler secret put SESSION_SECRET / .env.local) before signing any session.'
+      );
+    }
+    if (secret.length < MIN_SESSION_SECRET_LENGTH) {
+      throw new Error(`SESSION_SECRET must be at least ${MIN_SESSION_SECRET_LENGTH} characters long`);
+    }
+    return secret;
+  }
+
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'SESSION_SECRET is not configured. Refusing to sign sessions: a known or empty ' +
+        'secret would let anyone forge a session cookie for any account.'
+    );
+  }
+
+  // Development / tests without configuration: an ephemeral secret keeps local
+  // work usable while guaranteeing no known value is ever signed with in
+  // production. Sessions do not survive a process restart, which is
+  // acceptable locally.
+  ephemeralDevSecret ??= randomSecret();
+  return ephemeralDevSecret;
 }
 
 /**
