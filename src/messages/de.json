@@ -144,7 +144,8 @@
     "passwordHint": "Mindestens 6 Zeichen",
     "loginBtn": "Anmelden",
     "registerBtn": "Konto erstellen",
-    "closeModal": "Schließen"
+    "closeModal": "Schließen",
+    "pwaHandoffComplete": "Google-Anmeldung bestätigt — du kannst zur Ticker-Tracker-App zurückkehren; deine Sitzung wird automatisch übernommen."
   },
   "editTracking": {
     "title": "Referenzwert bearbeiten",

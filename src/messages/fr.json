@@ -144,7 +144,8 @@
     "passwordHint": "Au moins 6 caractères",
     "loginBtn": "Connexion",
     "registerBtn": "Créer un compte",
-    "closeModal": "Fermer la boîte de dialogue"
+    "closeModal": "Fermer la boîte de dialogue",
+    "pwaHandoffComplete": "Connexion Google confirmée — vous pouvez revenir à l'application Ticker-Tracker ; votre session sera reprise automatiquement."
   },
   "editTracking": {
     "title": "Modifier la valeur de référence",

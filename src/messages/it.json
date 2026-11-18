@@ -144,7 +144,8 @@
     "passwordHint": "Almeno 6 caratteri",
     "loginBtn": "Accedi",
     "registerBtn": "Crea account",
-    "closeModal": "Chiudi"
+    "closeModal": "Chiudi",
+    "pwaHandoffComplete": "Accesso Google confermato: puoi tornare all'app Ticker-Tracker; la tua sessione verrà ripresa automaticamente."
   },
   "editTracking": {
     "title": "Modifica valore di riferimento",

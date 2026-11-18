@@ -144,7 +144,8 @@
     "passwordHint": "At least 6 characters",
     "loginBtn": "Sign In",
     "registerBtn": "Create Account",
-    "closeModal": "Close modal"
+    "closeModal": "Close modal",
+    "pwaHandoffComplete": "Google sign-in confirmed — you can return to the Ticker-Tracker app; it picks up your session automatically."
   },
   "editTracking": {
     "title": "Edit Reference Target",

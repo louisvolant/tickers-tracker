@@ -1,11 +1,15 @@
 import { cookies } from 'next/headers';
 import { passwordMarker, signSession, verifySession } from './authCrypto';
+import {
+  isValidLoginTicketId,
+  PWA_LOGIN_TICKET_TTL_SEC,
+} from './oauth';
 import { SessionUser } from './types';
 import { getUserRepository } from './users';
 
 import { getEnvVar } from './env';
 
-const SESSION_COOKIE_NAME = 'tt_session';
+export const SESSION_COOKIE_NAME = 'tt_session';
 const SESSION_TTL_SEC = 30 * 24 * 60 * 60; // 30 days
 
 // The value this repository used to ship as a hardcoded fallback secret. It is
@@ -37,6 +41,19 @@ export interface SessionCookie {
   name: string;
   value: string;
   options: SessionCookieOptions;
+}
+
+/** Cookie attributes for a 30-day session, shared by every issuing route. */
+export function sessionCookieAttributes(secure: boolean): SessionCookieOptions {
+  const now = Date.now();
+  return {
+    httpOnly: true,
+    secure,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: SESSION_TTL_SEC,
+    expires: new Date(now + SESSION_TTL_SEC * 1000),
+  };
 }
 
 /** Shape of the signed session token payload. */
@@ -135,15 +152,37 @@ export async function createSessionCookie(
   return {
     name: SESSION_COOKIE_NAME,
     value,
-    options: {
-      httpOnly: true,
-      secure,
-      sameSite: 'lax',
-      path: '/',
-      maxAge: SESSION_TTL_SEC,
-      expires: new Date(now + SESSION_TTL_SEC * 1000),
-    },
+    options: sessionCookieAttributes(secure),
   };
+}
+
+/**
+ * Server-signed `state` value for the standalone (home-screen app) login
+ * flow. The initiating app and the Google callback run in different cookie
+ * jars on iOS, so the state carries a reference to the KV login ticket
+ * instead of relying on a cookie; the HMAC signature makes the reference
+ * unforgeable and the expiry bounds its lifetime.
+ */
+export async function createLoginTicketState(ticketId: string): Promise<string> {
+  return signSession(
+    { t: ticketId, exp: Date.now() + PWA_LOGIN_TICKET_TTL_SEC * 1000 },
+    getSessionSecret()
+  );
+}
+
+/**
+ * Resolve a `state` value back to its login ticket id, or null when the
+ * value is not a ticket reference issued by this app (the browser flow uses
+ * a plain random state string instead).
+ */
+export async function verifyLoginTicketState(state: string): Promise<string | null> {
+  try {
+    const payload = await verifySession<{ t?: unknown }>(state, getSessionSecret());
+    if (typeof payload?.t !== 'string' || !isValidLoginTicketId(payload.t)) return null;
+    return payload.t;
+  } catch {
+    return null;
+  }
 }
 
 export async function getSessionUser(): Promise<SessionUser | null> {

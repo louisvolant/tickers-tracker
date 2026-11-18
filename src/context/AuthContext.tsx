@@ -7,6 +7,10 @@ import {
   reconcileSessionCheck,
   saveCachedUser,
 } from '@/lib/authSession';
+import {
+  clearStandaloneLogin,
+  readPendingStandaloneLogin,
+} from '@/lib/pwaLogin';
 
 interface AuthContextType {
   user: SessionUser | null;
@@ -76,6 +80,83 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     refreshUser();
   }, [refreshUser]);
+
+  // Standalone (home-screen PWA) Google login relay: iOS hands the Google
+  // navigation to Safari and isolates the app's cookie jar from it, so the
+  // callback hands the pre-signed session back through a one-time ticket.
+  // Poll it here: this covers the app staying open behind Safari (regular
+  // interval) and the app being suspended or killed (immediate check on
+  // resume/startup, since the nonce survives in localStorage).
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const stop = () => {
+      if (timer) clearTimeout(timer);
+      timer = null;
+    };
+
+    const poll = async () => {
+      if (cancelled) return;
+      const pending = readPendingStandaloneLogin();
+      if (!pending) {
+        stop();
+        return;
+      }
+
+      try {
+        const res = await fetch(
+          `/api/auth/login-status?ticket=${encodeURIComponent(pending.nonce)}`,
+          { cache: 'no-store' }
+        );
+        const data = (await res.json().catch(() => null)) as
+          | { status?: string; user?: SessionUser }
+          | null;
+
+        if (cancelled) return;
+
+        if (data?.status === 'ok' && data.user) {
+          clearStandaloneLogin();
+          saveCachedUser(data.user);
+          setUser(data.user);
+          setLoading(false);
+          stop();
+          return;
+        }
+        if (data?.status === 'expired' || data?.status === 'invalid') {
+          clearStandaloneLogin();
+          stop();
+          return;
+        }
+      } catch {
+        // Offline or transient failure: keep polling until the ticket TTL
+        // expires, at which point readPendingStandaloneLogin() clears it.
+      }
+
+      if (!cancelled) timer = setTimeout(poll, 2500);
+    };
+
+    poll();
+
+    // The user completed Google login in Safari and switched back: check the
+    // ticket immediately instead of waiting for the next interval (which may
+    // have been frozen while the app was suspended).
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        stop();
+        poll();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      cancelled = true;
+      stop();
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, []);
 
   const openAuthModal = (tab: 'login' | 'register' = 'login') => {
     setAuthModalTab(tab);

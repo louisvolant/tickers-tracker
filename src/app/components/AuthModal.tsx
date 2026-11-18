@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useI18n } from '@/context/I18nContext';
+import { beginStandaloneGoogleLogin, isStandaloneApp } from '@/lib/pwaLogin';
 import { X, Lock, Mail, User, AlertCircle, Loader2 } from 'lucide-react';
 
 export function AuthModal() {
@@ -15,6 +16,17 @@ export function AuthModal() {
   const [loading, setLoading] = useState(false);
 
   if (!authModalOpen) return null;
+
+  // In an installed home-screen app (iOS standalone), a plain navigation to
+  // /api/auth/google would end in Safari, whose cookie jar is isolated from
+  // the app: the session would never come back. Start the ticket relay
+  // instead, so the app itself redeems the signed session.
+  const handleGoogleClick = (e: React.MouseEvent) => {
+    if (isStandaloneApp()) {
+      e.preventDefault();
+      beginStandaloneGoogleLogin();
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,6 +101,7 @@ export function AuthModal() {
         {/* Google OAuth Button */}
         <a
           href="/api/auth/google"
+          onClick={handleGoogleClick}
           rel="nofollow"
           className="w-full flex items-center justify-center gap-3 py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-750 text-white font-medium text-sm border border-slate-700 hover:border-slate-600 transition shadow-sm mb-5"
         >

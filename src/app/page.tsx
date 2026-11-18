@@ -44,6 +44,7 @@ import {
 import { UserTicker, TickerQuote } from '@/lib/types';
 import { attachQuotes } from '@/lib/watchlistQuotes';
 import { BatchAddResult } from '@/lib/batchTickers';
+import { beginStandaloneGoogleLogin, isStandaloneApp } from '@/lib/pwaLogin';
 import {
   TrendingUp,
   Search,
@@ -83,6 +84,36 @@ function Dashboard() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [flash, setFlash] = useState<{ id: string; key: number } | null>(null);
   const flashFor = (id: string) => (flash && flash.id === id ? flash.key : undefined);
+  const [pwaLoginComplete, setPwaLoginComplete] = useState(false);
+
+  /**
+   * Safari banner of the standalone login relay: when the callback redirects
+   * here with ?pwa_login=complete, this window is Safari finishing a login
+   * that a home-screen app started. Tell the user they can go back to the
+   * app (which redeems the session through its own poll), then clean the URL.
+   */
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('pwa_login') === 'complete') {
+        setPwaLoginComplete(true);
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+    } catch {}
+  }, []);
+
+  /**
+   * In an installed home-screen app (iOS standalone), a plain navigation to
+   * /api/auth/google would finish in Safari, whose cookie jar is isolated
+   * from the app: the session would never come back. Start the ticket relay
+   * instead, so the app itself redeems the signed session.
+   */
+  const handleGoogleClick = (e: React.MouseEvent) => {
+    if (isStandaloneApp()) {
+      e.preventDefault();
+      beginStandaloneGoogleLogin();
+    }
+  };
 
   /**
    * Handle sort toggle on table column headers.
@@ -571,6 +602,14 @@ function Dashboard() {
         </div>
       )}
 
+      {/* Standalone login relay: shown in Safari after the home-screen app's Google login completed */}
+      {pwaLoginComplete && (
+        <div className="bg-emerald-500/10 border-b border-emerald-500/20 px-4 py-2 text-center text-xs text-emerald-400 flex items-center justify-center gap-2">
+          <ShieldCheck className="w-3.5 h-3.5" />
+          <span>{t('auth.pwaHandoffComplete')}</span>
+        </div>
+      )}
+
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Guest Banner if not logged in */}
         {!authLoading && !user && (
@@ -595,6 +634,7 @@ function Dashboard() {
                 </button>
                 <a
                   href="/api/auth/google"
+                  onClick={handleGoogleClick}
                   rel="nofollow"
                   className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-750 text-white font-medium text-xs sm:text-sm border border-slate-700 transition flex items-center gap-2 cursor-pointer"
                 >

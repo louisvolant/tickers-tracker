@@ -34,7 +34,7 @@ A modern, lightning-fast stock and valuation multiples tracker built with Next.j
 - **Comprehensive Forward P/E Educational Guide**: Integrated breakdown detailing how Forward P/E is calculated, Wall Street & European analyst consensus mechanisms, forecast horizons (NTM / next FY), Trailing vs. Forward comparisons, and key analytical limitations.
 - **Optional Reference Target & % Diff (Multi-Currency)**: Add or update your cost basis anytime directly from the ticker row, the mobile card details, or the ticker page. Enter the reference value either in the ticker's **listing currency** (default) or in **your own reference currency** (configured in Account Settings), and Ticker-Tracker converts it on the fly using live EUR-based rates to compute an FX-inclusive `% Diff` on desktop and mobile. Ticker-Tracker automatically highlights the percentage variance (`% Diff`) in real time, or displays clean pricing without any target requirements.
 - **Zero-Latency & Zero-Flash Mobile/PWA Startup (IndexedDB + Cached Session)**: Saved tickers, quotes, and the last authenticated user session (`tt_cached_user`) are restored immediately on startup. Reopening the PWA displays your cached watchlist and signed-in state right away without flashing the guest banner, while `/api/auth/me` and `/api/tickers` synchronize in the background. Offline startups and transient network errors preserve the cached session and IndexedDB watchlist; the user is only signed out when the server explicitly confirms that the session has expired or become invalid.
-- **Progressive Web App (PWA)**: Installable on iOS, Android, and Desktop with offline caching via Service Worker and web app manifest.
+- **Progressive Web App (PWA)**: Installable on iOS, Android, and Desktop with offline caching via Service Worker and web app manifest. Google sign-in works inside the installed app: a one-time ticket relay brings the session back from Safari (see [Google OAuth Configuration](#google-oauth-configuration)).
 - **Multimodal Search (Ticker, Label & ISIN)**: Search stocks by symbol (e.g. `PUST`, `WPEA`), company name / ETF label (e.g. `LVMH`, `AIRBUS`, `SCHNEIDER`), or official ISIN codes (e.g. `FR0011871110`, `FR001400Q9V2`), supplemented by live Yahoo Finance search.
 - **Interactive Financial Stats & Charts**: Full-page ticker view at `/ticker/[symbol]` with historical price trends, 52-week ranges, dividend yields, EPS, market capitalization, and beta. Deep-linkable, browser-back friendly, and stable on mobile (no two-pass reflow).
 - **Flexible Display & Sorting Modes (Custom, Reorganize, Alphabetical, By Trading Exchange)**: Switch seamlessly with the dropdown button docked right on the title bar:
@@ -54,7 +54,7 @@ A modern, lightning-fast stock and valuation multiples tracker built with Next.j
   - **Dual Responsive Architecture**: Split-screen side-by-side mode on desktop (`md:`), and an automatic morphing view with tactile comparison tabs (`Raw input` ⇄ `Enriched cards`) on mobile.
   - **3 Realistic 1-Click Presets**: Preloaded with Broker notes (`AAPL, MSFT...`), PEA & US mix (`MC.PA, AIR.PA, TSLA...`), and unstructured forum discussions.
   - **Zero-Friction CTAs & Replay**: One-click replay (`↺`) plus direct access to the live batch-add importer.
-- **Account Lifecycle & Security**: Registration, login, Google OAuth 2.0 integration (each Google login is bound to the browser that started it by a one-time `state` cookie and a PKCE `code_verifier`, blocking login CSRF and intercepted authorization codes), password updates (`/api/auth/changepassword`, which invalidates every session issued before the change on all other devices), and complete account deletion (`/api/auth/delete_my_account`). The session cookie is signed with a `SESSION_SECRET` that fails closed in production: the app refuses to sign sessions with a missing, too-short, or previously-committed default secret, so a leaked fallback can never forge a session. Custom mutation and cache-warming routes enforce a same-origin Origin/Referer check (the session cookie is `SameSite=Lax`), and registration rejects reserved, test-only and disposable email domains.
+- **Account Lifecycle & Security**: Registration, login, Google OAuth 2.0 integration (each Google login is bound to the browser that started it by a one-time `state` cookie and a PKCE `code_verifier`, blocking login CSRF and intercepted authorization codes; in an installed home-screen PWA on iOS, the same login completes through a one-time ticket relay, because Apple isolates the app's cookie jar from Safari), password updates (`/api/auth/changepassword`, which invalidates every session issued before the change on all other devices), and complete account deletion (`/api/auth/delete_my_account`). The session cookie is signed with a `SESSION_SECRET` that fails closed in production: the app refuses to sign sessions with a missing, too-short, or previously-committed default secret, so a leaked fallback can never forge a session. Custom mutation and cache-warming routes enforce a same-origin Origin/Referer check (the session cookie is `SameSite=Lax`), and registration rejects reserved, test-only and disposable email domains.
 - **Multilingual Support (i18n)**: Full localization across 6 languages: English (`en`), French (`fr`), German (`de`), Spanish (`es`), Italian (`it`), and Portuguese (`pt`), with an active language selector.
 - **SEO & Legal**: Canonical URLs on the homepage, ticker pages and legal pages, a 301 redirect from `http://` and the apex host to `https://www.tickertracker.net`, dynamic `sitemap.xml`, `robots.txt` (public pages allowed, `/api/` blocked and marked `noindex`), Privacy Policy (`/privacy`), Terms of Service (`/terms`), and footer links to [Personal Page](https://www.louisvolant.com) and [Portfolio](https://www.louisvolant.com/portfolio).
 - **Privacy-Safe Caching**: Personalized routes (`/ticker/`, `/api/`) are forced dynamic, sent with `Cache-Control: private, no-store`, and excluded from Service Worker Cache Storage — your reference target and personal notes are never retained by a CDN, proxy or offline cache.
@@ -222,6 +222,32 @@ In your Google Cloud Console OAuth Client configuration:
 3. The token exchange includes the `code_verifier`, so an authorization code intercepted through a redirect URL, referrer header or browser history cannot be exchanged by anyone else.
 4. The transaction cookie is consumed (overwritten with an expired one) on every callback outcome, success or error.
 
+**Home-screen PWA (iOS) login handoff.** iOS runs installed web apps in a
+sandboxed web view that shares neither cookies nor storage with Safari, and it
+hands external navigations (accounts.google.com) to Safari — so the
+cookie-bound state above can never return to the app. In standalone mode
+(`display-mode: standalone` / `navigator.standalone`) the Google button
+navigates to `/api/auth/google?pwa=1&nonce=<43-char random>` instead:
+
+1. The server keeps the PKCE verifier in a 10-minute KV login ticket and signs
+   the nonce into the OAuth `state` (an HMAC-signed reference, unforgeable and
+   expiring, in place of the transaction cookie).
+2. The callback — running in Safari — completes the token exchange with the
+   ticket's verifier and stores the **pre-signed session** against the ticket.
+   It deliberately sets no cookie in Safari: that window is not the app that
+   started the flow, and writing a session there would reopen login CSRF.
+3. The app polls `GET /api/auth/login-status?ticket=<nonce>` from its own
+   context. Once the ticket is completed, the poll redeems it exactly once and
+   the response sets the session cookie **in the app's own cookie jar**.
+4. Safari lands on `/?pwa_login=complete` and shows a "return to the app"
+   banner; the app picks the session up automatically on the next poll (a
+   `visibilitychange` listener checks immediately when the user switches back).
+
+The nonce is unguessable (32 random bytes), so possession of it is the only
+authorization the poll needs; pending tickets are never consumed by polling,
+completed tickets are single-use, and replaying a finished callback is
+rejected.
+
 ---
 
 ## Test Suite
@@ -249,6 +275,7 @@ Covers:
 - Request security: same-origin Origin/Referer enforcement (site, apex/www, preview, localhost; cross-site and malformed origins rejected) and the registration email-domain policy (reserved RFC 2606 domains, test artefacts and disposable providers)
 - Registration route: reserved domain rejected without an account, real domain accepted, duplicate still 409, cross-site origin rejected, and the E2E bypass for `@example.com`
 - OAuth login binding: one-time `state` + PKCE `code_challenge` in the authorize redirect, callback rejection on a missing or mismatched state, and the `code_verifier` threaded into the token exchange
+- Standalone (home-screen PWA) Google login relay: signed ticket state with an S256 challenge, a cookie-less callback completion, one-time redemption through the login-status poll, replay rejection, malformed-nonce fallback to the browser flow, and the client-side pending-ticket storage (`tests/pwaLoginRelay.test.ts`)
 - Session invalidation on password change: the salt-derived password marker embedded in each token rotates with every password write, so pre-change tokens stop validating (`tests/sessionRotation.test.ts`)
 
 ### Run End-to-End Tests (Playwright)
@@ -637,8 +664,9 @@ Guarded by `tests/tickerCachePolicy.test.ts` (config-level header assertions) an
 - `POST /api/auth/login`: Authenticate email/password credentials and set HTTP-only signed session cookie.
 - `GET /api/auth/me`: Retrieve currently authenticated user session.
 - `POST /api/auth/logout`: Terminate active session and clear cookies.
-- `GET /api/auth/google`: Initiate Google OAuth 2.0 authorization redirect. Issues a one-time transaction (CSRF `state` + PKCE verifier) in a 10-minute HttpOnly cookie scoped to the callback path, and sends the `state` and S256 `code_challenge` to Google.
+- `GET /api/auth/google`: Initiate Google OAuth 2.0 authorization redirect. Issues a one-time transaction (CSRF `state` + PKCE verifier) in a 10-minute HttpOnly cookie scoped to the callback path, and sends the `state` and S256 `code_challenge` to Google. In standalone (home-screen app) mode the client appends `?pwa=1&nonce=<43-char random>`: the server then signs the nonce into the state and keeps the PKCE verifier in a 10-minute KV login ticket (see the handoff flow above).
 - `GET /api/auth/callback/google`: Handle Google OAuth token exchange and session creation. Requires a matching `state` and exchanges the code with the PKCE verifier; any other callback is refused with `auth_error=invalid_state` and consumes the transaction cookie.
+- `GET /api/auth/login-status?ticket=<nonce>`: Standalone (home-screen app) login relay. Polls a login ticket: `pending` while Google login is in flight, `ok` (exactly once) once completed — the response sets the pre-signed session cookie in the caller's cookie jar — or `expired`/`invalid`.
 - `POST /api/auth/changepassword`: Change password with verification of existing password. Every session issued before the change (other devices, stolen cookies) is invalidated immediately; the requesting device receives a freshly signed session.
 - `PATCH /api/auth/preferences`: Update the user's preferred reference currency (used for multi-currency tracking).
 - `DELETE /api/auth/delete_my_account`: Permanently delete the account, its D1 tickers (or the KV watchlist) and the associated KV alert/push side data.
