@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSessionUser } from '@/lib/session';
-import { verifyPassword, hashPassword } from '@/lib/authCrypto';
+import { createSessionCookie, getSessionUser } from '@/lib/session';
+import { verifyPassword, hashPassword, passwordMarker } from '@/lib/authCrypto';
+import { getRequestOrigin } from '@/lib/env';
 import { getUserRepository } from '@/lib/users';
 import { assertSameOrigin } from '@/lib/sameOrigin';
 
@@ -51,7 +52,27 @@ export async function POST(request: NextRequest) {
     const newHashedPassword = await hashPassword(newPassword);
     await repo.updatePassword(user.id, newHashedPassword);
 
-    return NextResponse.json({ success: true, message: 'Password updated successfully' });
+    // PBKDF2 re-salts on every write, so the marker embedded in existing
+    // session tokens no longer matches the stored hash: every session issued
+    // before this change is now invalid, on every device. Re-sign only the
+    // session of the device that made this request, so the user is not
+    // logged out of the browser that just proved knowledge of the old
+    // password.
+    const session = await createSessionCookie(
+      {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        preferredCurrency: user.preferredCurrency,
+      },
+      getRequestOrigin(request).startsWith('https://'),
+      passwordMarker(newHashedPassword)
+    );
+
+    const response = NextResponse.json({ success: true, message: 'Password updated successfully' });
+    response.cookies.set(session.name, session.value, session.options);
+    response.headers.set('Cache-Control', 'private, no-store, max-age=0, must-revalidate');
+    return response;
   } catch (err) {
     console.error('Change password error:', err);
     return NextResponse.json({ error: 'Failed to update password' }, { status: 500 });

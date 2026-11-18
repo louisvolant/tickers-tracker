@@ -54,7 +54,7 @@ A modern, lightning-fast stock and valuation multiples tracker built with Next.j
   - **Dual Responsive Architecture**: Split-screen side-by-side mode on desktop (`md:`), and an automatic morphing view with tactile comparison tabs (`Raw input` ⇄ `Enriched cards`) on mobile.
   - **3 Realistic 1-Click Presets**: Preloaded with Broker notes (`AAPL, MSFT...`), PEA & US mix (`MC.PA, AIR.PA, TSLA...`), and unstructured forum discussions.
   - **Zero-Friction CTAs & Replay**: One-click replay (`↺`) plus direct access to the live batch-add importer.
-- **Account Lifecycle & Security**: Registration, login, Google OAuth 2.0 integration (each Google login is bound to the browser that started it by a one-time `state` cookie and a PKCE `code_verifier`, blocking login CSRF and intercepted authorization codes), password updates (`/api/auth/changepassword`), and complete account deletion (`/api/auth/delete_my_account`). The session cookie is signed with a `SESSION_SECRET` that fails closed in production: the app refuses to sign sessions with a missing, too-short, or previously-committed default secret, so a leaked fallback can never forge a session. Custom mutation and cache-warming routes enforce a same-origin Origin/Referer check (the session cookie is `SameSite=Lax`), and registration rejects reserved, test-only and disposable email domains.
+- **Account Lifecycle & Security**: Registration, login, Google OAuth 2.0 integration (each Google login is bound to the browser that started it by a one-time `state` cookie and a PKCE `code_verifier`, blocking login CSRF and intercepted authorization codes), password updates (`/api/auth/changepassword`, which invalidates every session issued before the change on all other devices), and complete account deletion (`/api/auth/delete_my_account`). The session cookie is signed with a `SESSION_SECRET` that fails closed in production: the app refuses to sign sessions with a missing, too-short, or previously-committed default secret, so a leaked fallback can never forge a session. Custom mutation and cache-warming routes enforce a same-origin Origin/Referer check (the session cookie is `SameSite=Lax`), and registration rejects reserved, test-only and disposable email domains.
 - **Multilingual Support (i18n)**: Full localization across 6 languages: English (`en`), French (`fr`), German (`de`), Spanish (`es`), Italian (`it`), and Portuguese (`pt`), with an active language selector.
 - **SEO & Legal**: Canonical URLs on the homepage, ticker pages and legal pages, a 301 redirect from `http://` and the apex host to `https://www.tickertracker.net`, dynamic `sitemap.xml`, `robots.txt` (public pages allowed, `/api/` blocked and marked `noindex`), Privacy Policy (`/privacy`), Terms of Service (`/terms`), and footer links to [Personal Page](https://www.louisvolant.com) and [Portfolio](https://www.louisvolant.com/portfolio).
 - **Privacy-Safe Caching**: Personalized routes (`/ticker/`, `/api/`) are forced dynamic, sent with `Cache-Control: private, no-store`, and excluded from Service Worker Cache Storage — your reference target and personal notes are never retained by a CDN, proxy or offline cache.
@@ -249,6 +249,7 @@ Covers:
 - Request security: same-origin Origin/Referer enforcement (site, apex/www, preview, localhost; cross-site and malformed origins rejected) and the registration email-domain policy (reserved RFC 2606 domains, test artefacts and disposable providers)
 - Registration route: reserved domain rejected without an account, real domain accepted, duplicate still 409, cross-site origin rejected, and the E2E bypass for `@example.com`
 - OAuth login binding: one-time `state` + PKCE `code_challenge` in the authorize redirect, callback rejection on a missing or mismatched state, and the `code_verifier` threaded into the token exchange
+- Session invalidation on password change: the salt-derived password marker embedded in each token rotates with every password write, so pre-change tokens stop validating (`tests/sessionRotation.test.ts`)
 
 ### Run End-to-End Tests (Playwright)
 ```bash
@@ -393,6 +394,15 @@ After the contract phase, restore the KV backup or use D1 Time Travel.
 before accepting a signed cookie. A cookie issued before the account was deleted
 (or before the storage migration) is therefore rejected on the next request
 instead of surviving until its 30-day expiry.
+
+Session tokens additionally embed a **password marker**: a slice of the random
+salt of the stored PBKDF2 hash (non-secret, but rotated on every password
+write). `POST /api/auth/changepassword` persists the new hash — which changes
+the marker — and re-signs only the session of the device that made the request.
+Every token issued before the change (other devices, stolen or leaked cookies)
+stops validating immediately instead of surviving until the 30-day expiry.
+Google-only accounts carry no marker and are unaffected; a malformed stored
+hash degrades to signature-plus-account-existence validation.
 
 The unique index `users_email_unique` is the actual guard against concurrent
 duplicate registrations; the route maps the constraint error to `409` without a
@@ -629,6 +639,6 @@ Guarded by `tests/tickerCachePolicy.test.ts` (config-level header assertions) an
 - `POST /api/auth/logout`: Terminate active session and clear cookies.
 - `GET /api/auth/google`: Initiate Google OAuth 2.0 authorization redirect. Issues a one-time transaction (CSRF `state` + PKCE verifier) in a 10-minute HttpOnly cookie scoped to the callback path, and sends the `state` and S256 `code_challenge` to Google.
 - `GET /api/auth/callback/google`: Handle Google OAuth token exchange and session creation. Requires a matching `state` and exchanges the code with the PKCE verifier; any other callback is refused with `auth_error=invalid_state` and consumes the transaction cookie.
-- `POST /api/auth/changepassword`: Change password with verification of existing password.
+- `POST /api/auth/changepassword`: Change password with verification of existing password. Every session issued before the change (other devices, stolen cookies) is invalidated immediately; the requesting device receives a freshly signed session.
 - `PATCH /api/auth/preferences`: Update the user's preferred reference currency (used for multi-currency tracking).
 - `DELETE /api/auth/delete_my_account`: Permanently delete the account, its D1 tickers (or the KV watchlist) and the associated KV alert/push side data.

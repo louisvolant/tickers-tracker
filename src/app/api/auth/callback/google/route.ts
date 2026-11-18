@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSessionCookie } from '@/lib/session';
+import { passwordMarker } from '@/lib/authCrypto';
 import { getUserRepository } from '@/lib/users';
 
 import { getEnvVar, getRequestOrigin } from '@/lib/env';
@@ -120,7 +121,10 @@ export async function GET(request: NextRequest) {
       console.warn('Could not update last_login_at:', err);
     }
 
-    // 5. Build the session cookie and attach it to the redirect itself.
+    // 5. Build the session cookie and attach it to the redirect itself. The
+    // password marker keeps hybrid (password + Google) accounts subject to
+    // password-change session invalidation; Google-only accounts simply have
+    // no marker to match.
     const session = await createSessionCookie(
       {
         id: user.id,
@@ -128,7 +132,8 @@ export async function GET(request: NextRequest) {
         username: user.username,
         preferredCurrency: user.preferredCurrency,
       },
-      secure
+      secure,
+      passwordMarker(user.hashedPassword)
     );
 
     const response = redirectToAndClearTxn(`${origin}?auth_success=true`, secure);

@@ -92,6 +92,23 @@ export async function verifyPassword(password: string, storedHash: string): Prom
 }
 
 /**
+ * A short, non-secret marker of the stored password hash. PBKDF2 re-salts on
+ * every write, so the marker changes whenever the password is set again;
+ * embedding it in the session token lets verification reject tokens issued
+ * before the last password change. Only a slice of the random salt is used,
+ * so it reveals nothing about the password itself.
+ *
+ * Returns undefined for missing or malformed hashes: verification then
+ * degrades to signature-plus-account-existence instead of locking the user out.
+ */
+export function passwordMarker(hashedPassword: string | undefined | null): string | undefined {
+  if (!hashedPassword) return undefined;
+  const parts = hashedPassword.split('.');
+  if (parts.length !== 3 || parts[1].length < 12) return undefined;
+  return parts[1].slice(0, 12);
+}
+
+/**
  * Sign session payload with HMAC-SHA256
  */
 export async function signSession(payload: object, secretKey: string): Promise<string> {
@@ -114,7 +131,9 @@ export async function signSession(payload: object, secretKey: string): Promise<s
 }
 
 /**
- * Verify session token and return parsed payload
+ * Verify session token and return the full parsed payload (the `user` it
+ * contains plus the token metadata such as `exp` and the password marker),
+ * or null when the signature or the expiry check fails.
  */
 export async function verifySession<T = any>(token: string, secretKey: string): Promise<T | null> {
   try {
@@ -149,7 +168,7 @@ export async function verifySession<T = any>(token: string, secretKey: string): 
       return null;
     }
 
-    return parsed.user as T;
+    return parsed as T;
   } catch (err) {
     return null;
   }

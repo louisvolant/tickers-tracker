@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyPassword } from '@/lib/authCrypto';
+import { passwordMarker, verifyPassword } from '@/lib/authCrypto';
 import { createSessionCookie } from '@/lib/session';
 import { getRequestOrigin } from '@/lib/env';
 import { getUserRepository } from '@/lib/users';
@@ -48,7 +48,10 @@ export async function POST(request: NextRequest) {
 
     const session = await createSessionCookie(
       sessionUser,
-      getRequestOrigin(request).startsWith('https://')
+      getRequestOrigin(request).startsWith('https://'),
+      // Bind the token to the current password hash so a later password
+      // change invalidates it.
+      passwordMarker(user.hashedPassword)
     );
 
     const response = NextResponse.json({ user: sessionUser });

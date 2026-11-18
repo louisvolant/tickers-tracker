@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers';
-import { signSession, verifySession } from './authCrypto';
+import { passwordMarker, signSession, verifySession } from './authCrypto';
 import { SessionUser } from './types';
 import { getUserRepository } from './users';
 
@@ -37,6 +37,32 @@ export interface SessionCookie {
   name: string;
   value: string;
   options: SessionCookieOptions;
+}
+
+/** Shape of the signed session token payload. */
+export interface SessionPayload {
+  user: SessionUser;
+  exp?: number;
+  /** Salt-derived marker of the password hash at signing time. */
+  pwd?: string;
+}
+
+/**
+ * Whether a session payload is still valid for the account's current password
+ * hash. PBKDF2 re-salts on every password write, so a marker mismatch means
+ * the token was issued before the last password change and must be rejected.
+ *
+ * Accounts without a password (Google-only) have nothing to rotate and always
+ * pass; a malformed stored hash degrades to signature-plus-account-existence
+ * validation rather than locking the user out.
+ */
+export function isPasswordMarkerValid(
+  payload: SessionPayload | null,
+  hashedPassword: string | undefined
+): boolean {
+  const expected = passwordMarker(hashedPassword);
+  if (!expected) return true;
+  return payload?.pwd === expected;
 }
 
 /**
@@ -86,15 +112,21 @@ export function getSessionSecret(): string {
  * Auth routes set this cookie directly on their outgoing response, which keeps
  * the `Set-Cookie` header on redirects (Google OAuth callback) instead of
  * relying on framework cookie merging that some browsers handle differently.
+ *
+ * `pwdMarker` embeds the current password-hash marker into the signed payload
+ * (see `isPasswordMarkerValid`), so a password change invalidates every
+ * session issued before it.
  */
 export async function createSessionCookie(
   user: SessionUser,
-  secure: boolean = process.env.NODE_ENV === 'production'
+  secure: boolean = process.env.NODE_ENV === 'production',
+  pwdMarker?: string
 ): Promise<SessionCookie> {
   const now = Date.now();
   const value = await signSession(
     {
       user,
+      pwd: pwdMarker,
       exp: now + SESSION_TTL_SEC * 1000,
     },
     getSessionSecret()
@@ -120,17 +152,22 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
     if (!token) return null;
 
-    const session = await verifySession<SessionUser>(token, getSessionSecret());
-    if (!session?.id) return null;
+    const session = await verifySession<SessionPayload>(token, getSessionSecret());
+    if (!session?.user?.id) return null;
 
     // A valid signature only proves the cookie was issued by this app; it does
     // not prove the account still exists. Without this lookup, a session would
     // survive account deletion or a storage migration until its 30-day expiry
     // (the "ghost session" case).
-    const user = await getUserRepository().findById(session.id);
+    const user = await getUserRepository().findById(session.user.id);
     if (!user) return null;
 
-    return session;
+    // The marker check additionally proves the token was issued *after the
+    // last password change*, so a stolen cookie dies the moment the user
+    // rotates their password instead of surviving until the 30-day expiry.
+    if (!isPasswordMarkerValid(session, user.hashedPassword)) return null;
+
+    return session.user;
   } catch (err) {
     console.error('getSessionUser error:', err);
     return null;
@@ -141,7 +178,11 @@ export async function setSessionUser(
   user: SessionUser,
   secure: boolean = process.env.NODE_ENV === 'production'
 ): Promise<void> {
-  const cookie = await createSessionCookie(user, secure);
+  // Re-derive the password marker from the repository so the re-signed token
+  // stays valid afterwards: the marker is part of the signed payload, and a
+  // marker-less re-sign would invalidate the session on its next request.
+  const record = await getUserRepository().findById(user.id);
+  const cookie = await createSessionCookie(user, secure, passwordMarker(record?.hashedPassword));
   const cookieStore = await cookies();
   cookieStore.set(cookie.name, cookie.value, cookie.options);
 }

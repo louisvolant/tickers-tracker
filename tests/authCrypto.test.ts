@@ -19,10 +19,11 @@ describe('Auth Crypto Utilities', () => {
     const secret = 'test-secret-key-32-bytes-long-12345';
     const userPayload = { id: 'usr_123', email: 'test@example.com', username: 'trader1' };
     const token = await signSession({ user: userPayload, exp: Date.now() + 60000 }, secret);
-    
+
     assert.ok(token.includes('.'));
-    const verifiedUser = await verifySession(token, secret);
-    assert.deepStrictEqual(verifiedUser, userPayload);
+    // verifySession returns the full signed payload, not just the user.
+    const verified = await verifySession<{ user: typeof userPayload }>(token, secret);
+    assert.deepStrictEqual(verified?.user, userPayload);
 
     // Tampered token should fail
     const tampered = token.slice(0, -4) + 'abcd';

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { hashPassword } from '@/lib/authCrypto';
+import { hashPassword, passwordMarker } from '@/lib/authCrypto';
 import { createSessionCookie } from '@/lib/session';
 import { ISO_FIAT_CURRENCIES } from '@/lib/currencies';
 import { getRequestOrigin } from '@/lib/env';
@@ -80,7 +80,8 @@ export async function POST(request: NextRequest) {
 
     const session = await createSessionCookie(
       sessionUser,
-      getRequestOrigin(request).startsWith('https://')
+      getRequestOrigin(request).startsWith('https://'),
+      passwordMarker(hashedPassword)
     );
 
     const response = NextResponse.json({ user: sessionUser }, { status: 201 });
