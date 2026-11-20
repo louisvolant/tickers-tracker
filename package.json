@@ -36,13 +36,13 @@
   "devDependencies": {
     "@opennextjs/cloudflare": "^1.20.17",
     "@playwright/test": "^1.65.1",
-    "@types/node": "^22.13.0",
+    "@types/node": "^26.6.6",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "date-holidays": "^3.39.2",
     "postcss": "^8.5.33",
     "tsx": "^4.23.15",
-    "typescript": "^5.7.3",
+    "typescript": "^7.0.2",
     "wrangler": "^4.165.0"
   },
   "overrides": {
