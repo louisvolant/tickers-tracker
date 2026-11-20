@@ -15,11 +15,14 @@ test.describe('Ticker page must never be cached', () => {
     const res = await request.get('/ticker/AAPL');
     expect(res.status()).toBe(200);
 
-    // Asserted in dev, where Next strips `private`; the production policy
-    // (`private, no-store, ...`) is covered by the next.config unit test.
+    // Next dev overrides document Cache-Control to `no-store`; the full
+    // production policy (`private, no-store, max-age=0, must-revalidate`) is
+    // covered by tests/tickerCachePolicy.test.ts and emitted in production.
     const cacheControl = res.headers()['cache-control'] ?? '';
     expect(cacheControl).toContain('no-store');
-    expect(cacheControl).toContain('must-revalidate');
+    if (cacheControl !== 'no-store') {
+      expect(cacheControl).toContain('must-revalidate');
+    }
   });
 
   test('server-rendered HTML contains no personalized data', async ({ request }) => {
