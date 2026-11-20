@@ -80,6 +80,13 @@ test.describe('Ticker details chart resilience', () => {
       return ticks.length;
     });
     expect(points).toBeGreaterThan(0);
+
+    // Hover the chart surface to verify the Recharts Tooltip renders data cleanly.
+    const chartSurface = page.locator('.recharts-surface').first();
+    const box = await chartSurface.boundingBox();
+    expect(box).toBeTruthy();
+    await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+    await expect(page.locator('.recharts-tooltip-wrapper')).toBeVisible({ timeout: 5000 });
   });
 
   test('does not leak the previously opened ticker chart into the next one', async ({ page }) => {
