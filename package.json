@@ -25,24 +25,28 @@
     "@tailwindcss/postcss": "^4.3.5",
     "clsx": "^2.1.1",
     "lucide-react": "^0.511.0",
-    "next": "^16.4.5",
+    "next": "^16.4.6",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "recharts": "^2.15.1",
     "tailwind-merge": "^3.0.2",
     "tailwindcss": "^4.3.5",
-    "yahoo-finance2": "^4.0.5"
+    "yahoo-finance2": "^4.0.6"
   },
   "devDependencies": {
-    "@opennextjs/cloudflare": "^1.20.16",
-    "@playwright/test": "^1.65.0",
+    "@opennextjs/cloudflare": "^1.20.17",
+    "@playwright/test": "^1.65.1",
     "@types/node": "^22.13.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "date-holidays": "^3.38.0",
-    "postcss": "^8.5.32",
+    "date-holidays": "^3.39.2",
+    "postcss": "^8.5.33",
     "tsx": "^4.23.15",
     "typescript": "^5.7.3",
-    "wrangler": "^4.158.0"
+    "wrangler": "^4.165.0"
+  },
+  "overrides": {
+    "glob": "^14.0.6",
+    "minimatch": "^11.0.9"
   }
 }

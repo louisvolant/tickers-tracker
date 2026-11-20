@@ -7,6 +7,7 @@ import {
   holidayTableNeedsRefresh,
   type MarketHolidaysFile,
 } from '../src/lib/marketHolidays.ts';
+import { normalizeHolidayName } from '../scripts/generate-market-holidays.ts';
 
 const table = marketHolidaysData as MarketHolidaysFile;
 
@@ -51,9 +52,18 @@ describe('Generated market holiday table', () => {
   });
 
   test('omits holidays the venue ignores', () => {
-    // Euronext Paris trades on Victory Day; NYSE trades on Columbus Day.
+    // Euronext Paris trades on Victory Day and All Saints' Day; Euronext
+    // Amsterdam trades on King's Day; NYSE trades on Columbus Day.
     assert.ok(!table.holidays['Europe/Paris'].includes('2026-05-08'));
+    assert.ok(!table.holidays['Europe/Paris'].includes('2026-11-01'));
+    assert.ok(!table.holidays['Europe/Amsterdam'].includes('2026-04-27'));
     assert.ok(!table.holidays['America/New_York'].includes('2026-10-12'));
+  });
+
+  test('normalizes typographic apostrophes in holiday names', () => {
+    assert.strictEqual(normalizeHolidayName("All Saints\u2019 Day"), "All Saints' Day");
+    assert.strictEqual(normalizeHolidayName("King\u2018s Day"), "King's Day");
+    assert.strictEqual(normalizeHolidayName("  All Saints' Day  "), "All Saints' Day");
   });
 
   test('refresh logic reacts to age, coverage and malformed data', () => {

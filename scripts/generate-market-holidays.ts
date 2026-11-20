@@ -20,6 +20,14 @@ const DEFAULT_YEARS = 15;
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
+/**
+ * Normalize typographic apostrophes so ignored-holiday matching survives
+ * upstream punctuation changes in `date-holidays` (e.g. `'` vs `’`).
+ */
+export function normalizeHolidayName(name: string): string {
+  return name.replace(/[\u2018\u2019\u201B]/g, "'").trim();
+}
+
 export interface GenerateMarketHolidaysOptions {
   fromYear?: number;
   toYear?: number;
@@ -59,12 +67,15 @@ export async function generateMarketHolidays(
       providers.set(calendar.country, provider);
     }
 
+    const ignoredSet = new Set(
+      (calendar.ignoredHolidays ?? []).map(normalizeHolidayName)
+    );
     const closed = new Set<string>();
 
     for (let year = fromYear; year <= toYear; year++) {
       for (const holiday of provider.getHolidays(year)) {
         if (holiday.type !== 'public') continue;
-        if (calendar.ignoredHolidays?.includes(holiday.name)) continue;
+        if (ignoredSet.has(normalizeHolidayName(String(holiday.name)))) continue;
         closed.add(String(holiday.date).slice(0, 10));
       }
 
